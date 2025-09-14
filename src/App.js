@@ -70,6 +70,32 @@ function App() {
       document.querySelector('#contact').scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const name = formData.get('name');
+    const email = formData.get('email');
+    const message = formData.get('message');
+    
+    // Créer le lien mailto avec les informations du formulaire
+    const subject = encodeURIComponent(`Message from ${name} - Portfolio Contact`);
+    const body = encodeURIComponent(`Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`);
+    const mailtoLink = `mailto:fenontsoa@gmail.com?subject=${subject}&body=${body}`;
+    
+    // Ajouter la classe success au formulaire
+    e.target.classList.add('success');
+    
+    // Ouvrir le client email par défaut
+    window.location.href = mailtoLink;
+    
+    // Retirer la classe success après 3 secondes
+    setTimeout(() => {
+      e.target.classList.remove('success');
+      e.target.reset(); // Vider le formulaire
+    }, 3000);
+  };
   return (
     <div className="App">
       {/* Navigation */}
@@ -118,27 +144,34 @@ function App() {
           <div className="about-content">
             <div className="about-text">
               <p>
-                Passionate developer with expertise in modern web technologies. 
-                I specialize in creating immersive digital experiences that combine 
-                cutting-edge design with robust functionality.
+                Experienced System and Network Administrator with over 15 years of expertise 
+                in the IT industry. I have worked both in Madagascar and internationally, 
+                holding senior positions where I successfully managed complex infrastructure 
+                projects and ensured optimal system performance across diverse technological 
+                environments.
               </p>
               <div className="stats">
                 <div className="stat-item">
-                  <span className="stat-number">50+</span>
-                  <span className="stat-label">Projects</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-number">3+</span>
+                  <span className="stat-number">15+</span>
                   <span className="stat-label">Years</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-number">100%</span>
-                  <span className="stat-label">Passion</span>
+                  <span className="stat-number">100+</span>
+                  <span className="stat-label">Systems</span>
+                </div>
+                <div className="stat-item">
+                  <span className="stat-number">24/7</span>
+                  <span className="stat-label">Support</span>
                 </div>
               </div>
             </div>
             <div className="about-image">
               <div className="image-container">
+                <img 
+                  src="/images/profile.jpg" 
+                  alt="Fenontsoa D. ANDRIANARIVONDRIAKA" 
+                  className="profile-image"
+                />
                 <div className="image-glow"></div>
               </div>
             </div>
@@ -281,15 +314,33 @@ function App() {
                 </div>
               </div>
             </div>
-            <form className="contact-form">
+            <form className="contact-form" onSubmit={handleFormSubmit}>
               <div className="form-group">
-                <input type="text" placeholder="Your Name" className="form-input" />
+                <input 
+                  type="text" 
+                  name="name"
+                  placeholder="Your Name" 
+                  className="form-input" 
+                  required 
+                />
               </div>
               <div className="form-group">
-                <input type="email" placeholder="Your Email" className="form-input" />
+                <input 
+                  type="email" 
+                  name="email"
+                  placeholder="Your Email" 
+                  className="form-input" 
+                  required 
+                />
               </div>
               <div className="form-group">
-                <textarea placeholder="Your Message" className="form-textarea" rows="5"></textarea>
+                <textarea 
+                  name="message"
+                  placeholder="Your Message" 
+                  className="form-textarea" 
+                  rows="5"
+                  required
+                ></textarea>
               </div>
               <button type="submit" className="btn-primary">Send Message</button>
             </form>

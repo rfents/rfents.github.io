@@ -355,21 +355,25 @@ section {
   position: relative;
 }
 
-.image-glow {
+.profile-image {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: #1a1a1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: cover;
+  object-position: center;
   position: relative;
+  z-index: 2;
 }
 
-.image-glow::before {
-  content: '👨‍💻';
-  font-size: 4rem;
-  filter: grayscale(1) brightness(0.8);
+.image-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(184, 134, 11, 0.1));
+  z-index: 1;
 }
 
 /* ===== SKILLS SECTION ===== */
@@ -631,6 +635,38 @@ section {
 
 .form-input::placeholder, .form-textarea::placeholder {
   color: #666;
+}
+
+/* Contact form success message */
+.contact-form.success {
+  position: relative;
+}
+
+.contact-form.success::after {
+  content: 'Message envoyé ! Votre client email va s\'ouvrir.';
+  position: absolute;
+  top: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #D4AF37, #B8860B);
+  color: #0a0a0a;
+  padding: 1rem 2rem;
+  border-radius: 25px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  box-shadow: 0 10px 30px rgba(212, 175, 55, 0.3);
+  animation: slideDown 0.5s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* ===== FOOTER ===== */
