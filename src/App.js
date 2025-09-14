@@ -76,7 +76,7 @@ function App() {
       <nav className="navbar">
         <div className="nav-container">
           <div className="nav-logo">
-            <span className="logo-text">RF</span>
+            <span className="logo-text">FDA</span>
           </div>
           <ul className="nav-menu">
             <li><a href="#home" className="nav-link">Home</a></li>
@@ -95,9 +95,8 @@ function App() {
         </div>
         <div className="hero-content">
           <h1 className="hero-title">
-            <span className="title-line">Hi, I'm</span>
-            <span className="title-line highlight">Rafael Fents</span>
-            <span className="title-line">Full Stack Developer</span>
+            <span className="title-line">Fenontsoa D. ANDRIANARIVONDRIAKA</span>
+            <span className="title-line highlight">Portfolio</span>
           </h1>
           <p className="hero-subtitle">
             Creating digital experiences that push the boundaries of innovation
@@ -270,15 +269,15 @@ function App() {
               <div className="contact-methods">
                 <div className="contact-method">
                   <span className="contact-icon">📧</span>
-                  <span>rafael@example.com</span>
+                  <span>fenontsoa@gmail.com</span>
                 </div>
                 <div className="contact-method">
                   <span className="contact-icon">📱</span>
-                  <span>+1 (555) 123-4567</span>
+                  <span>+261 34 25 140 01</span>
                 </div>
                 <div className="contact-method">
                   <span className="contact-icon">📍</span>
-                  <span>Paris, France</span>
+                  <span>Antananarivo, Madagascar</span>
                 </div>
               </div>
             </div>
@@ -302,7 +301,7 @@ function App() {
       <footer className="footer">
         <div className="container">
           <div className="footer-content">
-            <p>&copy; 2024 Rafael Fents. All rights reserved.</p>
+            <p>&copy; 2024 Fenontsoa D. ANDRIANARIVONDRIAKA. All rights reserved.</p>
             <div className="social-links">
               <a href="#" className="social-link">GitHub</a>
               <a href="#" className="social-link">LinkedIn</a>
