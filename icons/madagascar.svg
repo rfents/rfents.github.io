@@ -1,5 +1,10 @@
 <svg width="24" height="18" viewBox="0 0 24 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- White background -->
   <rect width="24" height="18" fill="#FFFFFF"/>
-  <rect width="8" height="18" fill="#FF0000"/>
-  <rect y="9" width="24" height="9" fill="#00FF00"/>
+  <!-- Red vertical stripe (left side) -->
+  <rect width="8" height="18" fill="#FC3D32"/>
+  <!-- Green horizontal stripe (bottom half) -->
+  <rect y="9" width="24" height="9" fill="#007E3A"/>
+  <!-- Subtle border for better definition -->
+  <rect width="24" height="18" fill="none" stroke="#E0E0E0" stroke-width="0.1"/>
 </svg>
