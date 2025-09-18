@@ -1,0 +1,21 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Shield -->
+  <path d="M24 4L8 8V22C8 30 16 36 24 40C32 36 40 30 40 22V8L24 4Z" stroke="#D4AF37" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Shield inner design -->
+  <path d="M24 8L12 10.5V22C12 28 18 32 24 35C30 32 36 28 36 22V10.5L24 8Z" stroke="#B8860B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Lock -->
+  <rect x="20" y="18" width="8" height="10" rx="2" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M18 18V14C18 10.5 20.5 8 24 8C27.5 8 30 10.5 30 14V18" stroke="#D4AF37" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Key -->
+  <circle cx="32" cy="24" r="2" fill="#D4AF37"/>
+  <path d="M34 24L38 20" stroke="#D4AF37" stroke-width="2" stroke-linecap="round"/>
+  <path d="M36 18L40 14" stroke="#D4AF37" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Security dots -->
+  <circle cx="16" cy="20" r="1" fill="#B8860B"/>
+  <circle cx="32" cy="16" r="1" fill="#B8860B"/>
+  <circle cx="16" cy="28" r="1" fill="#B8860B"/>
+</svg>
