@@ -2,7 +2,17 @@ import math, random
 random.seed(5)
 W,H=1584,396
 GLOW='filter="url(#glowS)"'
-G="#D4AF37"; G2="#f3dc8a"; C="#7fd6ff"
+import sys,json
+PALETTES={
+ "gold":   dict(G="#D4AF37",G2="#f3dc8a",C="#7fd6ff",bg1="#1d1707",bg2="#0e0d0a",sph1="#2a220c",sph2="#110f08",off="#3a3015",e1="#8B4513",e2="#B8860B"),
+ "cyan":   dict(G="#00c8ff",G2="#aef3ff",C="#ff4fd8",bg1="#062436",bg2="#060e16",sph1="#0b3550",sph2="#06141f",off="#0c2c3a",e1="#7b2ff7",e2="#00ffd5"),
+ "cyberpunk": dict(G="#b44bff",G2="#ff7ad9",C="#00f0ff",bg1="#240a3c",bg2="#0d0717",sph1="#31104f",sph2="#140823",off="#2b1440",e1="#00f0ff",e2="#ff2e97"),
+ "emerald":dict(G="#00e08c",G2="#a8ffd6",C="#29b6ff",bg1="#06281b",bg2="#07110d",sph1="#0b3c28",sph2="#061910",off="#0e2c20",e1="#0077ff",e2="#00ffa3"),
+ "electric":dict(G="#4f80ff",G2="#b7cbff",C="#00ffe1",bg1="#0c1846",bg2="#070a1b",sph1="#16286a",sph2="#0a112d",off="#1a2352",e1="#a034ff",e2="#00e5ff"),
+}
+NAME=sys.argv[1] if len(sys.argv)>1 else "gold"
+P=PALETTES[NAME]
+G,G2,C,OFF=P["G"],P["G2"],P["C"],P["off"]
 out=[]
 def a(s): out.append(s)
 
@@ -100,7 +110,7 @@ def rack(x,y,w,h,units,seed):
         for k in range(3):
             on=rnd.random()<.72
             col = C if (k==2 and rnd.random()<.35) else G2
-            a(f'<circle cx="{x+13+k*6}" cy="{yy+uh/2-1:.1f}" r="1.7" fill="{col if on else "#3a3015"}" {GLOW if on else ""}/>')
+            a(f'<circle cx="{x+13+k*6}" cy="{yy+uh/2-1:.1f}" r="1.7" fill="{col if on else OFF}" {GLOW if on else ""}/>')
 racks=[(560,70,120,270,11,1),(700,40,140,320,13,2),(860,70,120,270,11,3)]
 for r in racks: rack(*r)
 # floor reflection glow under racks
@@ -149,12 +159,12 @@ termsvg=f'<text x="36" y="34" font-family="JetBrains Mono" font-size="12.5" fill
 
 svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">
 <defs>
- <radialGradient id="bg" cx="72%" cy="50%" r="75%"><stop offset="0" stop-color="#1d1707"/><stop offset=".45" stop-color="#0e0d0a"/><stop offset="1" stop-color="#070707"/></radialGradient>
+ <radialGradient id="bg" cx="72%" cy="50%" r="75%"><stop offset="0" stop-color="{P["bg1"]}"/><stop offset=".45" stop-color="{P["bg2"]}"/><stop offset="1" stop-color="#070707"/></radialGradient>
  <radialGradient id="halo"><stop offset=".78" stop-color="{G}" stop-opacity=".18"/><stop offset="1" stop-color="{G}" stop-opacity="0"/></radialGradient>
- <radialGradient id="sphere" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="#2a220c"/><stop offset=".6" stop-color="#110f08"/><stop offset="1" stop-color="#060606"/></radialGradient>
+ <radialGradient id="sphere" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="{P["sph1"]}"/><stop offset=".6" stop-color="{P["sph2"]}"/><stop offset="1" stop-color="#060606"/></radialGradient>
  <radialGradient id="floorglow"><stop offset="0" stop-color="{G}" stop-opacity=".28"/><stop offset="1" stop-color="{G}" stop-opacity="0"/></radialGradient>
  <linearGradient id="rackfill" x1="0" x2="1"><stop offset="0" stop-color="#1b1b1b"/><stop offset=".5" stop-color="#121212"/><stop offset="1" stop-color="#0b0b0b"/></linearGradient>
- <linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="{G}" stop-opacity="0"/><stop offset=".25" stop-color="#8B4513"/><stop offset=".6" stop-color="{G}"/><stop offset="1" stop-color="#B8860B"/></linearGradient>
+ <linearGradient id="edge" x1="0" x2="1"><stop offset="0" stop-color="{G}" stop-opacity="0"/><stop offset=".25" stop-color="{P["e1"]}"/><stop offset=".6" stop-color="{G}"/><stop offset="1" stop-color="{P["e2"]}"/></linearGradient>
  <pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="{G}" stroke-opacity=".05"/></pattern>
  <filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
  <filter id="glowS" x="-300%" y="-300%" width="700%" height="700%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
@@ -170,4 +180,4 @@ svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox
 </svg>'''
 html=f'''<!doctype html><html><head><meta charset="utf-8"><link href="fonts.css" rel="stylesheet">
 <style>*{{margin:0}}html,body{{width:{W}px;height:{H}px;overflow:hidden;background:#070707}}</style></head><body>{svg}</body></html>'''
-open("cover.html","w").write(html)
+open(f"cover-{NAME}.html","w").write(html)
