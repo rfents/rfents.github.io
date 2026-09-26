@@ -18,7 +18,7 @@ def a(s): out.append(s)
 
 # ---------- globe (orthographic) ----------
 CX,CY,R=1265,205,165
-lon0=math.radians(42); lat0=math.radians(12)
+lon0=math.radians(56); lat0=math.radians(15)
 def proj(lat,lon,r=R):
     la,lo=math.radians(lat),math.radians(lon)
     x=math.cos(la)*math.sin(lo-lon0)
@@ -52,9 +52,16 @@ for lat,lon in json.load(open("land_dots.json")):
     x,y,z=proj(lat,lon)
     if z>0.02: a(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{.7+.9*z:.2f}" fill="{G}" fill-opacity="{.15+.55*z:.2f}"/>')
 
-cities={"TNR":(-18.9,47.5),"PAR":(48.9,2.3),"DXB":(25.2,55.3),"JNB":(-26.2,28.0),"SIN":(1.35,103.8),
-        "BOM":(19.1,72.9),"LON":(51.5,-0.1),"NBO":(-1.3,36.8),"CAI":(30.0,31.2),"FRA":(50.1,8.7),"MRU":(-20.2,57.5),"HKG":(22.3,114.2)}
-links=[("TNR","PAR"),("TNR","DXB"),("TNR","JNB"),("TNR","SIN"),("LON","DXB"),("NBO","BOM"),("CAI","JNB")]
+cities={"TNR":(-18.91,47.52),   # Antananarivo, Madagascar (hub)
+        "SSG":(3.75,8.78),      # Malabo, Equatorial Guinea
+        "NSI":(3.87,11.52),     # Yaounde, Cameroon
+        "MRU":(-20.16,57.50),   # Port Louis, Mauritius
+        "PAR":(48.86,2.35),     # Paris, France
+        "BRU":(50.85,4.35),     # Brussels, Belgium
+        "BCN":(41.39,2.17),     # Barcelona, Spain
+        "PEK":(39.90,116.40),   # Beijing, China
+        "DEL":(28.61,77.21)}    # New Delhi, India
+links=[("TNR",c) for c in cities if c!="TNR"]
 def slerp(p,q,t):
     la1,lo1=map(math.radians,p); la2,lo2=map(math.radians,q)
     v1=(math.cos(la1)*math.cos(lo1),math.cos(la1)*math.sin(lo1),math.sin(la1))
@@ -65,9 +72,12 @@ def slerp(p,q,t):
     return math.degrees(math.asin(v[2])),math.degrees(math.atan2(v[1],v[0]))
 for i,(s,e) in enumerate(links):
     pts=[]
+    p,q=[tuple(map(math.radians,cities[c])) for c in (s,e)]
+    dist=math.acos(math.sin(p[0])*math.sin(q[0])+math.cos(p[0])*math.cos(q[0])*math.cos(p[1]-q[1]))
+    lift=.03+.11*dist
     for k in range(41):
         t=k/40; la,lo=slerp(cities[s],cities[e],t)
-        pts.append(proj(la,lo,R*(1+.12*math.sin(math.pi*t))))
+        pts.append(proj(la,lo,R*(1+lift*math.sin(math.pi*t))))
     if all(z>-0.05 for _,_,z in pts):
         d=path([(x,y) for x,y,_ in pts])
         a(f'<path d="{d}" fill="none" stroke="{G2}" stroke-width="1.3" stroke-opacity=".9" filter="url(#glow)"/>')
