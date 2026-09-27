@@ -1,486 +1,167 @@
 #!/usr/bin/env python3
-"""Generate an Anki (.apkg) deck for Fortinet NSE 4 / FortiGate Administrator (FortiOS 7.x).
+"""Generate an interactive MCQ / True-False Anki deck (.apkg) for Fortinet NSE 4
+(FortiGate Administrator, FortiOS 7.x). Questions live in nse4_questions.py.
+
+On the front, tap the option(s) you think are right, then show the answer:
+the back highlights the correct options, marks your wrong picks and shows an explanation.
 
 Usage: pip install genanki && python3 generate_nse4.py
 """
 import html
+import random
+
 import genanki
 
-DECK_ID = 1727460001
-MODEL_ID = 1727460002
+from nse4_questions import MODULES
+
+DECK_ID = 1727460101
+MODEL_ID = 1727460102
+SEP = "|||"
 
 CSS = """
-.card { font-family: Arial, sans-serif; font-size: 19px; text-align: left;
-        color: #1d1d1f; background: #fff; padding: 8px; }
+.card { font-family: Arial, sans-serif; font-size: 18px; text-align: left;
+        color: #1d1d1f; background: #fff; padding: 6px; }
 .module { font-size: 12px; color: #fff; background: #da291c; display: inline-block;
           padding: 2px 8px; border-radius: 10px; margin-bottom: 10px; }
-.q { font-weight: bold; }
-.a { margin-top: 6px; line-height: 1.45; }
-code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 16px; }
+.type { background: #555; }
+.q { font-weight: bold; margin-bottom: 10px; }
+.opt { display: flex; align-items: flex-start; gap: 10px; margin: 8px 0; padding: 10px 12px;
+       border: 2px solid #ccc; border-radius: 10px; cursor: pointer; user-select: none; }
+.opt .letter { font-weight: bold; min-width: 18px; }
+.opt.picked { border-color: #1a73e8; background: #e8f0fe; }
+.opt.right { border-color: #1e8e3e; background: #e6f4ea; }
+.opt.wrong { border-color: #d93025; background: #fce8e6; }
+.opt.right.picked::after { content: "✔"; margin-left: auto; color: #1e8e3e; font-weight: bold; }
+.opt.wrong::after { content: "✘"; margin-left: auto; color: #d93025; font-weight: bold; }
+.verdict { font-size: 20px; font-weight: bold; margin: 6px 0; }
+.verdict.ok { color: #1e8e3e; } .verdict.ko { color: #d93025; } .verdict.none { color: #777; font-size: 15px; }
+.expl { line-height: 1.45; }
+code { background: #f2f2f2; padding: 1px 4px; border-radius: 3px; font-size: 15px; }
 .nightMode .card, .night_mode .card { color: #eee; background: #1e1e1e; }
+.nightMode .opt, .night_mode .opt { border-color: #555; }
+.nightMode .opt.picked, .night_mode .opt.picked { background: #1c2b45; border-color: #8ab4f8; }
+.nightMode .opt.right, .night_mode .opt.right { background: #173a24; border-color: #81c995; }
+.nightMode .opt.wrong, .night_mode .opt.wrong { background: #4a1f1c; border-color: #f28b82; }
 .nightMode code, .night_mode code { background: #333; }
+"""
+
+# Selection is kept in sessionStorage (AnkiDroid reloads the page between sides)
+# with a window variable as fallback (Anki desktop keeps the same page).
+JS = r"""
+function nse4Render(back) {
+  var box = document.getElementById('opts');
+  var opts = document.getElementById('src').innerHTML.split('""" + SEP + r"""');
+  var right = document.getElementById('key').textContent.trim().split(/\s+/).map(Number);
+  var qid = document.querySelector('.q').textContent;
+  var multi = right.length > 1;
+  function load() {
+    var s = null;
+    try { s = JSON.parse(sessionStorage.getItem('nse4sel') || 'null'); } catch (e) {}
+    if (!s) s = window.__nse4sel;
+    return (s && s.q === qid) ? s.sel : [];
+  }
+  function save(sel) {
+    var s = {q: qid, sel: sel};
+    window.__nse4sel = s;
+    try { sessionStorage.setItem('nse4sel', JSON.stringify(s)); } catch (e) {}
+  }
+  var sel = back ? load() : [];
+  if (!back) save([]);
+  box.innerHTML = '';
+  opts.forEach(function (t, i) {
+    var d = document.createElement('div');
+    d.className = 'opt';
+    d.innerHTML = '<span class="letter">' + String.fromCharCode(65 + i) + '</span><span>' + t + '</span>';
+    if (back) {
+      var isRight = right.indexOf(i) >= 0, isPicked = sel.indexOf(i) >= 0;
+      if (isRight) d.classList.add('right');
+      if (isPicked) d.classList.add(isRight ? 'picked' : 'wrong');
+    } else {
+      d.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var k = sel.indexOf(i);
+        if (multi) { if (k >= 0) sel.splice(k, 1); else sel.push(i); }
+        else sel = [i];
+        for (var j = 0; j < box.children.length; j++)
+          box.children[j].classList.toggle('picked', sel.indexOf(j) >= 0);
+        save(sel.slice());
+      });
+    }
+    box.appendChild(d);
+  });
+  if (back) {
+    var v = document.getElementById('verdict');
+    if (!sel.length) { v.textContent = 'No answer selected'; v.className = 'verdict none'; return; }
+    var ok = sel.length === right.length && sel.every(function (x) { return right.indexOf(x) >= 0; });
+    v.textContent = ok ? '✔ Correct' : '✘ Incorrect';
+    v.className = 'verdict ' + (ok ? 'ok' : 'ko');
+  }
+}
+"""
+
+COMMON = """<div class="module">{{Module}}</div> <div class="module type">{{Type}}</div>
+<div class="q">{{Question}}</div>
+<div id="opts"></div>
+<div id="src" style="display:none">{{Options}}</div>
+<div id="key" style="display:none">{{Answer}}</div>
 """
 
 MODEL = genanki.Model(
     MODEL_ID,
-    "NSE4 FortiGate Basic",
-    fields=[{"name": "Module"}, {"name": "Question"}, {"name": "Answer"}],
+    "NSE4 MCQ / True-False",
+    fields=[{"name": f} for f in ("Question", "Options", "Answer", "Explanation", "Type", "Module")],
     templates=[{
-        "name": "Card 1",
-        "qfmt": '<div class="module">{{Module}}</div><div class="q">{{Question}}</div>',
-        "afmt": '{{FrontSide}}<hr id="answer"><div class="a">{{Answer}}</div>',
+        "name": "Practice",
+        "qfmt": COMMON + "<script>" + JS + "nse4Render(false);</script>",
+        "afmt": COMMON + '<div id="verdict" class="verdict"></div><hr id="answer">'
+                '<div class="expl">{{Explanation}}</div>'
+                "<script>" + JS + "nse4Render(true);</script>",
     }],
     css=CSS,
 )
 
 
 def fmt(text):
-    """Escape HTML, then turn `x` into <code>x</code> and newlines into <br>."""
-    out, parts = [], html.escape(text).split("`")
-    for i, p in enumerate(parts):
-        out.append(f"<code>{p}</code>" if i % 2 else p)
-    return "".join(out).replace("\n", "<br>")
+    """Escape HTML, then turn `x` into <code>x</code>."""
+    parts = html.escape(text).split("`")
+    return "".join(f"<code>{p}</code>" if i % 2 else p for i, p in enumerate(parts))
 
 
-CARDS = {
-"System & Network Settings": [
-    ("Default management IP and admin credentials of a new FortiGate?",
-     "Usually `192.168.1.99/24` on port1/mgmt. User `admin` with an empty password; FortiOS forces a new password at first login."),
-    ("CLI command to reset a FortiGate to factory defaults?",
-     "`execute factoryreset` (use `execute factoryreset2` to keep interface and VDOM settings)."),
-    ("How do you recover a lost admin password on a hardware FortiGate?",
-     "Reboot, then log in on the console within ~60 s with user `maintainer` and password `bcpb` + serial number (uppercase). Only possible if the maintainer account is enabled."),
-    ("What are the two default administrator profiles?",
-     "`super_admin` (full access, cannot be changed) and `prof_admin` (full access within its VDOM, no global settings)."),
-    ("What do trusted hosts do on an admin account?",
-     "They restrict the source IPs from which that administrator can log in. If any admin has no trusted hosts, the FortiGate still answers login attempts from everywhere for that account."),
-    ("Default admin idle timeout?",
-     "5 minutes (`config system global` → `set admintimeout`)."),
-    ("Where do you enable HTTPS, SSH, PING, SNMP or FMG-Access for administration?",
-     "Per interface, under Administrative Access (`set allowaccess` in `config system interface`)."),
-    ("What addressing modes can a FortiGate interface use?",
-     "Manual (static), DHCP, PPPoE (on supported models), and One-Arm Sniffer."),
-    ("What are the interface roles and what do they change?",
-     "LAN, WAN, DMZ, Undefined. The role only changes which settings the GUI shows (e.g. WAN hides DHCP server, LAN shows it); it doesn't change forwarding."),
-    ("What is a VLAN interface on FortiGate?",
-     "An 802.1Q sub-interface bound to a physical interface with a VLAN ID. It behaves like a separate interface with its own IP and policies."),
-    ("What is a zone?",
-     "A group of interfaces used as one object in policies. Intra-zone traffic can be blocked or allowed with a single setting."),
-    ("How can you protect a configuration backup?",
-     "Encrypt it with a password when you back it up. You need the same password to restore it."),
-    ("What should you check before upgrading firmware?",
-     "The supported upgrade path (Fortinet Upgrade Path Tool), release notes, and a configuration backup. Skipping steps can lose config."),
-    ("What is a DHCP reservation on FortiGate?",
-     "A MAC address to IP binding in the DHCP server, so a device always gets the same address."),
-    ("Where does FortiGate get its signature and rating updates?",
-     "From FortiGuard through the FortiGuard Distribution Network (FDN). `execute update-now` forces an update; `diagnose autoupdate versions` shows versions."),
-    ("What does the Dashboard > Status 'Licenses' widget show?",
-     "FortiCare support and FortiGuard subscription status (AV, IPS, Web Filter, etc.) and their expiry."),
-],
-"Firewall Policies": [
-    ("In what order does FortiGate evaluate firewall policies?",
-     "Top to bottom, by sequence (not by policy ID). The first matching policy is applied."),
-    ("What happens to traffic that matches no policy?",
-     "It hits the implicit deny (policy ID 0) at the bottom and is dropped. Logging it is off by default."),
-    ("What criteria does FortiGate use to match a firewall policy?",
-     "Incoming interface, outgoing interface, source (address, user/group, ISDB, device), destination (address, ISDB), service, and schedule."),
-    ("Difference between policy ID and policy sequence number?",
-     "The ID is a fixed identifier assigned when the policy is created. The sequence is its position in the list, which decides match order."),
-    ("What types of firewall address objects exist?",
-     "Subnet, IP range, FQDN, Geography, Dynamic (e.g. fabric connectors, EMS tags), MAC address, and interface subnet."),
-    ("What is the Internet Service Database (ISDB)?",
-     "A FortiGuard database of IPs, ports and protocols for well-known internet services (Google, Microsoft 365, etc.). You use it in policies as the destination instead of an address + service."),
-    ("What are the two logging options for allowed traffic in a policy?",
-     "Security Events (logs only sessions that triggered a security profile) and All Sessions."),
-    ("How do you find which policy a flow will match?",
-     "Use the Policy Lookup tool in the GUI (enter interface, source, destination, protocol and port), or run a debug flow."),
-    ("Flow-based vs proxy-based inspection?",
-     "Flow-based scans packets as they pass. It's faster and uses less memory. Proxy-based buffers and rebuilds the whole content (e.g. files) before scanning, which gives more features and accuracy but more latency."),
-    ("NGFW profile-based vs policy-based mode?",
-     "Profile-based: apps and URL categories are set in security profiles attached to policies. Policy-based: apps and URL categories go straight into security policies, with an SSL inspection & authentication policy in front."),
-    ("What is a policy's schedule?",
-     "A time object (one-time or recurring) that defines when the policy is active."),
-    ("Default session TTL on FortiGate?",
-     "3600 seconds. You can change it globally, per service, or per policy."),
-    ("CLI commands to view the session table filtered on an IP?",
-     "`diagnose sys session filter src 10.0.1.10` then `diagnose sys session list`. Clear the filter with `diagnose sys session filter clear`."),
-    ("What does 'Allow multiple interfaces in policies' allow?",
-     "Picking several incoming and outgoing interfaces (or 'any') in one policy. The policy list then only shows the Sequence Grouping view."),
-    ("Why might you duplicate a policy with 'Deny' above an allow policy?",
-     "To make an exception, such as blocking one host or one service, before the broader allow rule matches."),
-],
-"NAT": [
-    ("What is the default source NAT behavior when NAT is enabled in a policy?",
-     "The source IP is translated to the outgoing interface IP, with port address translation (PAT)."),
-    ("What are the four IP pool types?",
-     "Overload (default, PAT), One-to-One, Fixed Port Range, and Port Block Allocation."),
-    ("What does a Virtual IP (VIP) do?",
-     "Destination NAT: it maps an external IP (and optionally port) to an internal IP/port. It's used for port forwarding and static NAT."),
-    ("How is a VIP used in a firewall policy (policy NAT mode)?",
-     "Select the VIP object as the destination address of a policy from the external to the internal interface."),
-    ("Does a VIP with no port forwarding also do SNAT for return and outgoing traffic?",
-     "Yes. A static NAT VIP is bidirectional: outgoing traffic from the mapped server is sourced from the external IP (if NAT is enabled on the outbound policy)."),
-    ("By default, do deny policies match traffic destined to a VIP?",
-     "No. Enable `set match-vip enable` on the deny policy so it blocks traffic destined to VIPs."),
-    ("What is Central SNAT?",
-     "A separate SNAT table, evaluated top-down, that replaces the per-policy NAT setting. Firewall policies no longer have NAT options."),
-    ("In Central NAT mode, what destination do you put in the firewall policy for a DNAT flow?",
-     "The real (mapped, internal) address. You don't select the VIP in the policy. The DNAT & Virtual IPs table does the translation."),
-    ("What is a session helper?",
-     "An ALG that opens the related sessions some protocols need (FTP, SIP, TFTP, H.323…) and rewrites embedded IP addresses."),
-    ("What does Fixed Port Range IP pool guarantee?",
-     "Each internal IP maps to a fixed external IP and port range, so logs can be traced without per-session NAT logs."),
-],
-"Firewall Authentication": [
-    ("What user authentication methods does FortiGate support?",
-     "Local users, remote servers (LDAP, RADIUS, TACACS+, SAML), FSSO, RSSO, and certificate-based authentication. Two-factor with FortiToken, email or SMS."),
-    ("Active vs passive authentication?",
-     "Active: the user is prompted (captive portal / login page). Passive: identity is learned transparently (FSSO, RSSO)."),
-    ("What protocols can trigger an active authentication prompt?",
-     "HTTP, HTTPS, FTP and Telnet. You also need a policy that allows DNS before the user is authenticated."),
-    ("How do you apply authentication to a firewall policy?",
-     "Add a user or user group as a source in the policy (alongside the source address)."),
-    ("Default firewall authentication timeout?",
-     "10 minutes (`auth-timeout`). Types are idle (default), hard, and new-session."),
-    ("Which LDAP bind types exist?",
-     "Simple, Anonymous, and Regular. Regular needs a username/password to search the directory, which you usually need with Active Directory."),
-    ("Common name identifier usually used with Active Directory?",
-     "`sAMAccountName` (plain LDAP often uses `cn`)."),
-    ("CLI to test an LDAP server with a user?",
-     "`diagnose test authserver ldap <server> <user> <password>`."),
-    ("What is FSSO?",
-     "Fortinet Single Sign-On: it maps Windows AD logons to IP addresses so users are authenticated passively."),
-    ("What are the FSSO deployment modes?",
-     "DC agent mode (agent on each DC sends logons to a collector agent), collector agent polling mode (the CA polls DC event logs), and agentless polling (FortiGate polls DCs directly)."),
-    ("Default ports used by FSSO?",
-     "DC agent → collector agent: UDP 8002. Collector agent → FortiGate: TCP 8000."),
-    ("CLI to list FSSO logged-on users on FortiGate?",
-     "`diagnose debug authd fsso list`."),
-    ("What is RSSO?",
-     "RADIUS Single Sign-On: FortiGate learns user/IP mappings from RADIUS accounting messages (e.g. from a NAS or Wi-Fi controller)."),
-    ("Where do you see authenticated firewall users in the GUI?",
-     "Dashboard > Firewall Users monitor (you can also deauthenticate users there)."),
-],
-"Certificates & SSL Inspection": [
-    ("Certificate inspection vs full (deep) SSL inspection?",
-     "Certificate inspection reads only the SNI/certificate (CN/SAN), enough for web filtering by domain. Deep inspection decrypts, inspects and re-encrypts the full traffic (man-in-the-middle)."),
-    ("Which CA certificate does FortiGate use by default to re-sign certificates in deep inspection?",
-     "`Fortinet_CA_SSL`. Clients must trust it (import it as a trusted root) to avoid browser warnings."),
-    ("Which certificate is used when the server's certificate is untrusted?",
-     "`Fortinet_CA_Untrusted`, so the browser still shows a warning to the user."),
-    ("What are the built-in SSL inspection profiles?",
-     "`certificate-inspection`, `deep-inspection`, `no-inspection` and `custom-deep-inspection`. Built-ins are read-only, so clone them to customize."),
-    ("Why add exemptions to deep inspection?",
-     "For privacy or compliance (banking, health), and for apps that use certificate pinning and would break."),
-    ("What happens with certificate-pinned applications under deep inspection?",
-     "They reject the FortiGate re-signed certificate and fail. You need to exempt them."),
-    ("Where do you use a CSR on FortiGate?",
-     "To get a CA-signed certificate for the FortiGate itself (admin GUI, SSL VPN, or a subordinate CA for inspection)."),
-    ("Why use a subordinate CA signed by the enterprise PKI for deep inspection?",
-     "Domain devices already trust the enterprise root, so there are no warnings and you don't have to push the Fortinet CA."),
-    ("What does 'Inspect all ports' vs specific ports mean in an SSL profile?",
-     "It decides whether FortiGate looks for SSL/TLS on any port or only on the listed ports (e.g. HTTPS 443)."),
-],
-"Antivirus": [
-    ("What AV detection techniques does FortiGate use?",
-     "Signature (virus) scanning, grayware scanning, and heuristic / AI-based (machine learning) detection."),
-    ("What AV database types are available?",
-     "Normal (recent active threats), Extended (plus older threats), and Extreme (all known signatures, on supported models)."),
-    ("What is the difference between flow-based and proxy-based AV?",
-     "Proxy-based buffers the whole file before scanning (and holds it back). Flow-based scans as packets pass, caching the file and sending the last packet only after the verdict."),
-    ("What does FortiGate do by default with files over the oversize limit?",
-     "Passes them unscanned (configurable in the protocol options to block)."),
-    ("What is Content Disarm and Reconstruction (CDR)?",
-     "It strips active content (macros, scripts) from Office/PDF files, keeping a clean version. It needs proxy-based inspection."),
-    ("What does sending files to FortiSandbox add?",
-     "Zero-day detection through sandboxing, and dynamic signatures fed back to FortiGate."),
-    ("What does Outbreak Prevention do?",
-     "Checks file hashes against the FortiGuard outbreak database (and external hash lists) to catch new malware before signatures exist."),
-    ("Why is deep SSL inspection needed for AV on HTTPS?",
-     "Without decryption the file content is encrypted and can't be scanned."),
-    ("What does the user see when AV blocks an HTTP download?",
-     "A replacement message (block page) from FortiGate instead of the file."),
-],
-"Web Filtering & DNS Filtering": [
-    ("What actions can be applied to FortiGuard web categories?",
-     "Allow, Monitor, Block, Warning, Authenticate (and Disable)."),
-    ("In what order are web filter checks applied?",
-     "Static URL filter → FortiGuard category filter → advanced filters (safe search, etc.) → content filter (proxy)."),
-    ("What pattern types are available in the static URL filter?",
-     "Simple, Wildcard, and Regular Expression."),
-    ("What does the 'Exempt' action in the static URL filter do?",
-     "It allows the URL and skips the rest of the web filter checks (and optionally AV and other scans)."),
-    ("How do you recategorize a site locally?",
-     "With a web rating override (move a URL into another or a custom local category)."),
-    ("How does FortiGate get a URL's category?",
-     "It queries FortiGuard rating servers (HTTPS 443, or UDP 53/8888 depending on config) and caches the results."),
-    ("CLI to check FortiGuard web filter server connectivity?",
-     "`diagnose debug rating`."),
-    ("What does the 'Warning' action do?",
-     "Shows a warning page. The user can click through and continue for a set period."),
-    ("What does DNS filtering do?",
-     "It inspects DNS queries and blocks or redirects domains by FortiGuard category, a static domain filter, or botnet C&C lists. It's light and works without SSL inspection."),
-    ("What does DNS filter do when a domain is blocked?",
-     "Replies with a redirect to the FortiGuard block portal IP (or a custom IP), or blocks the query."),
-    ("Does certificate inspection allow category-based HTTPS filtering?",
-     "Yes. It uses the SNI or certificate to get the domain, but it can't see the full URL path."),
-],
-"Application Control": [
-    ("How does FortiGate identify applications?",
-     "With IPS engine application signatures that match traffic patterns, whatever the port."),
-    ("What actions can Application Control apply?",
-     "Allow, Monitor, Block, Quarantine (and traffic shaping)."),
-    ("Why is deep inspection often needed for Application Control?",
-     "Many apps share HTTPS (e.g. Facebook features). Telling sub-applications apart needs decrypted traffic."),
-    ("What are application overrides and filter overrides?",
-     "Application overrides set an action for a specific signature. Filter overrides set an action for signatures matching criteria (behavior, popularity, risk, vendor…)."),
-    ("What does 'Block applications detected on non-default ports' do?",
-     "Blocks a known app when it runs on a port other than its standard one (e.g. HTTP on port 8080)."),
-    ("Which has higher precedence: application overrides, filter overrides, or categories?",
-     "Application overrides → filter overrides → categories."),
-    ("Where do you see applications detected on the network?",
-     "FortiView (Applications) and Application Control logs."),
-],
-"Intrusion Prevention & DoS": [
-    ("What IPS detection methods does FortiGate use?",
-     "Signatures (known attacks), protocol decoders, and anomaly detection (DoS policies)."),
-    ("What actions can an IPS signature have?",
-     "Allow/Pass, Monitor, Block, Reset, Quarantine, or Default (the signature's recommended action)."),
-    ("What is a DoS policy?",
-     "A policy applied on the incoming interface that detects traffic anomalies (floods, sweeps, session limits) using thresholds."),
-    ("When is a DoS policy processed relative to firewall policies?",
-     "Before the firewall policy lookup, so it can drop attacks early."),
-    ("Name the categories of DoS anomalies.",
-     "Floods (e.g. `tcp_syn_flood`, `udp_flood`, `icmp_flood`), scans/sweeps (`tcp_port_scan`, `icmp_sweep`), and session limits (`ip_src_session`, `ip_dst_session`)."),
-    ("What does IPS fail-open do?",
-     "If the IPS engine is overloaded (socket buffer full), traffic passes uninspected instead of being dropped (`set fail-open enable`)."),
-    ("What are rate-based IPS signatures?",
-     "Signatures that trigger only after a threshold of matches in a time window (e.g. brute-force login attempts)."),
-    ("Why does IPS need deep inspection for many attacks?",
-     "Exploits inside HTTPS traffic can't be matched while encrypted."),
-    ("What is botnet C&C scanning in IPS?",
-     "It blocks or monitors connections to known botnet command-and-control IPs/domains from FortiGuard."),
-    ("CLI to restart the IPS engine or see its status?",
-     "`diagnose test application ipsmonitor` (e.g. option 99 restarts all IPS engines)."),
-],
-"Security Fabric": [
-    ("What are the minimum requirements to build a Security Fabric?",
-     "A root FortiGate plus a FortiAnalyzer or cloud logging (FortiAnalyzer Cloud / FortiGate Cloud). Downstream FortiGates join the root."),
-    ("Which TCP port do downstream FortiGates use to join the Fabric?",
-     "TCP 8013 (the upstream FortiGate must have Security Fabric Connection enabled on the interface)."),
-    ("What is an automation stitch?",
-     "A trigger (e.g. compromised host, event log, schedule) linked to one or more actions (email, quarantine, script, webhook…)."),
-    ("What is the Security Rating?",
-     "A set of audit checks (security posture, coverage, optimization) with scores and recommendations for the Fabric."),
-    ("What are Fabric connectors?",
-     "Integrations with external systems (public cloud SDN, threat feeds, SSO/FSSO, EMS…) that provide dynamic objects and data."),
-    ("What do Physical and Logical Topology views show?",
-     "The Fabric devices and connected endpoints, as a physical path or as logical links between interfaces."),
-],
-"Routing": [
-    ("How does FortiGate pick the best route?",
-     "Longest prefix match first, then lowest administrative distance, then lowest priority (for static routes). If there's still a tie, ECMP."),
-    ("Default administrative distances on FortiGate?",
-     "Connected 0, Static 10, eBGP 20, OSPF 110, RIP 120, iBGP 200."),
-    ("What is a static route's priority used for?",
-     "It breaks ties between routes with the same distance. Lower wins. Both routes stay in the routing table."),
-    ("Routing table vs routing database?",
-     "The routing table (FIB) has only active best routes. The database also has inactive routes (`get router info routing-table database`)."),
-    ("CLI to display the routing table?",
-     "`get router info routing-table all`."),
-    ("Are policy routes checked before or after the routing table?",
-     "Before. A matching policy route overrides the routing table (unless the action is 'Stop policy routing')."),
-    ("ECMP load balancing methods?",
-     "Source IP (default), Source-Destination IP, Weighted, and Usage (spillover)."),
-    ("What is the RPF check?",
-     "Reverse path forwarding anti-spoofing: the source of a new session must be reachable through the incoming interface. Loose mode (default) accepts any route. Strict mode needs the best route."),
-    ("What does a link health monitor do?",
-     "It probes a server (ping, HTTP, TCP echo…) through a gateway and removes the related static routes if the link fails."),
-    ("What is a blackhole route used for?",
-     "It silently drops traffic to a destination, for example to avoid leaking private subnets to the default route when a VPN is down."),
-    ("What routing protocols does FortiGate support?",
-     "Static, RIP, OSPF, BGP, IS-IS, and multicast (PIM)."),
-],
-"SD-WAN": [
-    ("What are the main SD-WAN building blocks?",
-     "Members (interfaces), zones (default `virtual-wan-link`), performance SLAs (health checks), and SD-WAN rules (steering)."),
-    ("What metrics does a performance SLA measure?",
-     "Latency, jitter and packet loss, using probes (ping, HTTP, DNS, TCP echo…) to a server."),
-    ("What are the SD-WAN rule strategies?",
-     "Manual, Best Quality, Lowest Cost (SLA), and Maximize Bandwidth (SLA)."),
-    ("What does the SD-WAN implicit rule do?",
-     "It sits at the bottom and uses the routing table / load balancing (source-IP by default) when no SD-WAN rule matches."),
-    ("What routing entry is needed for SD-WAN traffic?",
-     "A route (usually the default static route) that points to the SD-WAN zone/interface."),
-    ("In what order are SD-WAN rules evaluated?",
-     "Top to bottom. The first match wins, then the implicit rule applies."),
-    ("How do you reference SD-WAN in firewall policies?",
-     "Use the SD-WAN zone (e.g. `virtual-wan-link`) as the outgoing interface, not individual members."),
-],
-"IPsec VPN": [
-    ("What does IKE phase 1 establish?",
-     "The IKE SA: peer authentication (PSK or certificates), negotiation of encryption/hash/DH groups, and a secure channel for phase 2."),
-    ("What does IKE phase 2 establish?",
-     "The IPsec SAs (one per direction) that encrypt data. Quick mode selectors define the protected subnets."),
-    ("Main mode vs aggressive mode (IKEv1)?",
-     "Main mode: 6 messages, identity protected. Aggressive mode: 3 messages, identity in clear, needed to tell apart several dial-up peers by peer ID with PSK."),
-    ("Ports and protocols used by IPsec?",
-     "IKE on UDP 500, NAT-T on UDP 4500, and ESP (IP protocol 50)."),
-    ("Route-based vs policy-based IPsec on FortiGate?",
-     "Route-based (interface mode, recommended): a virtual tunnel interface, routes and normal policies. Policy-based: an IPsec policy with the 'IPsec' action, with no routes to the tunnel."),
-    ("What configuration is needed for a route-based site-to-site VPN besides the tunnel?",
-     "A static route to the remote subnet via the tunnel interface, and firewall policies in both directions (LAN ↔ tunnel)."),
-    ("What must match on both sides for phase 2 to come up?",
-     "Quick mode selectors (local/remote subnets), proposals, PFS/DH settings, and matching lifetimes are recommended."),
-    ("What is Dead Peer Detection (DPD)?",
-     "Keepalives that detect a dead peer and tear down the SAs. Modes are on-idle, on-demand, and disabled."),
-    ("What is a dial-up VPN?",
-     "A VPN where the remote peer has a dynamic IP. The hub has a 'Dialup User' gateway and only the remote side can start the tunnel."),
-    ("What is IKE mode config?",
-     "It pushes IP, DNS and split-tunnel settings to dial-up clients (e.g. FortiClient) during IKE negotiation."),
-    ("CLI commands to troubleshoot IPsec?",
-     "`diagnose vpn ike gateway list`, `diagnose vpn tunnel list`, and `diagnose debug application ike -1` + `diagnose debug enable`."),
-    ("What does anti-replay do?",
-     "It drops ESP packets with duplicate or too-old sequence numbers."),
-],
-"SSL VPN & ZTNA": [
-    ("What are the SSL VPN access modes?",
-     "Web mode (browser portal with bookmarks) and Tunnel mode (FortiClient, full network access through a virtual interface)."),
-    ("Which interface represents SSL VPN in policies?",
-     "`ssl.root` (per VDOM `ssl.<vdom>`). It's the incoming interface of the SSL VPN policy."),
-    ("What is required in the SSL VPN firewall policy?",
-     "Incoming `ssl.root`, the internal outgoing interface, the destination, and the SSL VPN user or group as the source."),
-    ("Split tunneling vs full tunnel?",
-     "Split: only traffic to the protected networks goes through the tunnel. Full: all client traffic goes through the FortiGate."),
-    ("What does the SSL VPN portal define?",
-     "Tunnel/web mode, IP pool for tunnel clients, split tunneling, bookmarks, and client checks."),
-    ("What is ZTNA on FortiGate?",
-     "Zero Trust Network Access: an access proxy that allows each application based on user identity and device posture (ZTNA tags from FortiClient EMS)."),
-    ("What does FortiClient EMS provide for ZTNA?",
-     "Endpoint posture tags, the client certificate used to identify devices, and centralized FortiClient management."),
-    ("What is the recommended replacement for SSL VPN tunnel mode in recent FortiOS?",
-     "IPsec VPN (IKEv2, TCP transport) for remote access, or ZTNA. SSL VPN tunnel mode is being phased out in FortiOS 7.6+."),
-],
-"High Availability": [
-    ("What are the two FGCP HA modes?",
-     "Active-Passive (one unit processes traffic) and Active-Active (the primary load-balances sessions with security profiles to the secondaries)."),
-    ("What must match for FortiGates to form an FGCP cluster?",
-     "Same model and hardware, firmware, licenses, HA group ID/name/password, and operating mode. They need heartbeat connectivity."),
-    ("Primary election order with override disabled (default)?",
-     "Most monitored interfaces up → highest HA uptime → highest priority → highest serial number."),
-    ("Primary election order with override enabled?",
-     "Most monitored interfaces up → highest priority → highest HA uptime → highest serial number."),
-    ("What HA uptime difference is ignored during election?",
-     "Less than 5 minutes (300 s, `ha-uptime-diff-margin`). Within that margin the next criterion is used."),
-    ("How do clients keep using the cluster after failover?",
-     "Cluster interfaces use virtual MAC addresses, and the new primary sends gratuitous ARPs."),
-    ("Is session pickup enabled by default?",
-     "No. Enable `session-pickup` to sync TCP sessions (and optionally UDP/ICMP) for seamless failover."),
-    ("What is FGSP?",
-     "FortiGate Session Life Support Protocol: session sync between standalone FortiGates (peers), often behind load balancers. It's not a full cluster."),
-    ("What are heartbeat interfaces used for?",
-     "Hello packets, config and session sync, and state checks. Use redundant heartbeat links."),
-    ("CLI to check HA status and config sync?",
-     "`get system ha status`, `diagnose sys ha status`, and `diagnose sys ha checksum cluster`."),
-    ("How do you log in to a secondary unit from the primary CLI?",
-     "`execute ha manage <index> <admin_user>`."),
-    ("What is a reserved (dedicated) management interface in HA?",
-     "An interface with its own IP on each member, not synced, for direct management and SNMP of each unit."),
-    ("In Active-Active, which sessions are load-balanced by default?",
-     "Only sessions that go through security profiles (UTM). Others are handled by the primary unless `load-balance-all` is enabled."),
-],
-"Virtual Domains (VDOMs)": [
-    ("What is a VDOM?",
-     "A virtual FortiGate inside one device, with its own interfaces, routing, policies, profiles and administrators."),
-    ("What is the management VDOM?",
-     "The VDOM used for FortiGate's own management traffic (FortiGuard updates, logging, NTP…). It's `root` by default."),
-    ("What VDOM modes exist in FortiOS 7.x?",
-     "No VDOM, Multi VDOM, and Split-task VDOM (`root` for management, `FG-traffic` for traffic)."),
-    ("How do two VDOMs communicate internally?",
-     "With inter-VDOM links (a pair of virtual interfaces, can be NPU-accelerated `npu0_vlink`). You also need routes and policies."),
-    ("Global vs per-VDOM settings?",
-     "Global: HA, firmware, FortiGuard, admin accounts, physical interface properties. Per-VDOM: policies, routing, profiles, VPNs, addresses."),
-    ("How many VDOMs do most FortiGate models support by default?",
-     "10 (more with a VDOM license on larger models)."),
-    ("Can an interface belong to several VDOMs?",
-     "No. Each interface (including VLANs) belongs to one VDOM."),
-],
-"Layer 2 & Transparent Mode": [
-    ("What is transparent mode?",
-     "The FortiGate (or VDOM) acts as a Layer 2 bridge and applies policies and inspection with no routing or IP changes on the network."),
-    ("What IP does a transparent mode FortiGate need?",
-     "A management IP (and gateway) for administration and FortiGuard updates."),
-    ("What is a forwarding domain in transparent mode?",
-     "A broadcast domain (`forward-domain` ID) that limits where broadcast/unknown frames are flooded between interfaces."),
-    ("What is a software switch?",
-     "A group of interfaces that act as one Layer 2 switch with one IP. Traffic between members can skip policies."),
-    ("Hardware switch vs software switch?",
-     "A hardware switch uses the switch chip (fast, fixed ports). A software switch uses the CPU and can include Wi-Fi SSIDs or other interface types."),
-],
-"Logging & Monitoring": [
-    ("What are the three main log types?",
-     "Traffic logs, Event logs, and Security logs (AV, Web Filter, IPS, App Control…)."),
-    ("Where can FortiGate store logs?",
-     "Local disk (if present), memory, FortiAnalyzer, FortiGate Cloud / FortiAnalyzer Cloud, and syslog/FortiSIEM."),
-    ("What protocol/port does FortiGate use to send logs to FortiAnalyzer?",
-     "OFTP on TCP 514 (encrypted by default). 'Reliable logging' makes it use TCP."),
-    ("List the log severity levels from most to least severe.",
-     "Emergency, Alert, Critical, Error, Warning, Notification, Information, Debug."),
-    ("What is threat weight?",
-     "A score given to security events (by severity) to rank risky users and devices in FortiView."),
-    ("What are the traffic log subtypes?",
-     "Forward (through traffic), Local (to/from the FortiGate itself), and Sniffer."),
-    ("Why may local disk logging be disabled on some models?",
-     "Small flash-based models disable disk logging to protect flash life. Use FortiAnalyzer or the cloud instead."),
-    ("What must be enabled in a policy for its security profile events to be logged?",
-     "Log Allowed Traffic (Security Events or All Sessions), plus logging enabled in the profile."),
-],
-"Diagnostics & Troubleshooting": [
-    ("Typical debug flow command sequence?",
-     "`diagnose debug flow filter addr 10.0.1.10`\n`diagnose debug flow show function-name enable`\n`diagnose debug console timestamp enable`\n`diagnose debug enable`\n`diagnose debug flow trace start 10`"),
-    ("How do you stop debug output?",
-     "`diagnose debug disable` and `diagnose debug reset` (or `diagnose debug flow trace stop`)."),
-    ("Syntax of the packet sniffer?",
-     "`diagnose sniffer packet <interface|any> '<filter>' <verbosity> <count> <timestamp>`, e.g. `diagnose sniffer packet any 'host 8.8.8.8 and icmp' 4 10 a`."),
-    ("What does sniffer verbosity 4 add?",
-     "The interface name for each packet (verbosity 1 = headers only, 3 = with data, 6 = hex with interface and Ethernet header)."),
-    ("Which debug flow message shows a packet dropped by policy?",
-     "`Denied by forward policy check (policy 0)`, which means the implicit deny."),
-    ("CLI to show CPU, memory and session usage?",
-     "`get system performance status`. `diagnose sys top` shows per-process usage."),
-    ("What is conserve mode?",
-     "A protection state when memory is high. By default it's entered at 88% (red), extreme at 95%, and exited below 82% (green)."),
-    ("What does `av-failopen` control during conserve mode?",
-     "What happens to new sessions needing proxy inspection: `pass` (default), `off` (block), or `one-shot`."),
-    ("CLI to show firmware version, serial, operation mode and VDOM info?",
-     "`get system status`."),
-    ("CLI to check interface speed/duplex and errors?",
-     "`diagnose hardware deviceinfo nic <port>` (and `get hardware nic <port>`)."),
-    ("What do NP and CP processors do?",
-     "NP (network processors) offload firewall/IPsec session forwarding. CP (content processors) speed up encryption and IPS/AV pattern matching."),
-    ("How do you see if a session is hardware-offloaded?",
-     "In `diagnose sys session list`, look for `npu info` / `offload=` flags and the `npu` state."),
-    ("Which command tests connectivity from a specific source interface IP?",
-     "`execute ping-options source <ip>` then `execute ping <dest>` (similarly `execute traceroute`)."),
-    ("CLI to check FortiGuard update status and versions?",
-     "`diagnose autoupdate versions` and `diagnose autoupdate status`."),
-],
-}
+def build_note(module, entry):
+    q, choices, expl = entry
+    if isinstance(choices, bool):  # True/False statement
+        options, right, kind = ["True", "False"], [0 if choices else 1], "True / False"
+        question = q
+    else:
+        items = [(c.lstrip("*"), c.startswith("*")) for c in choices]
+        random.Random(q).shuffle(items)  # deterministic shuffle so the answer isn't always A
+        options = [t for t, _ in items]
+        right = [i for i, (_, ok) in enumerate(items) if ok]
+        kind = "MCQ"
+        question = q
+    return genanki.Note(
+        model=MODEL,
+        fields=[fmt(question), SEP.join(fmt(o) for o in options), " ".join(map(str, right)),
+                fmt(expl), kind, html.escape(module)],
+        tags=["NSE4", "".join(c for c in module.title() if c.isalnum()),
+              "TrueFalse" if kind != "MCQ" else "MCQ"],
+        guid=genanki.guid_for("nse4-practice", q),
+    )
 
 
 def main():
-    deck = genanki.Deck(DECK_ID, "Fortinet NSE 4 - FortiGate Administrator")
-    for module, cards in CARDS.items():
-        for q, a in cards:
-            deck.add_note(genanki.Note(
-                model=MODEL,
-                fields=[html.escape(module), fmt(q), fmt(a)],
-                tags=["NSE4", "".join(c for c in module.title() if c.isalnum())],
-                guid=genanki.guid_for("nse4", q),
-            ))
-    out = "NSE4_FortiGate_Administrator.apkg"
-    genanki.Package(deck).write_to_file(out)
-    print(f"{out}: {len(deck.notes)} cards in {len(CARDS)} modules")
+    decks, counts = [], {"MCQ": 0, "True / False": 0}
+    for n, (module, entries) in enumerate(MODULES, 1):
+        deck = genanki.Deck(DECK_ID + n, f"NSE 4 Practice::{n:02d} {module}")
+        for e in entries:
+            note = build_note(module, e)
+            counts[note.fields[4]] += 1
+            deck.add_note(note)
+        decks.append(deck)
+    out = "NSE4_Practice_MCQ_TrueFalse.apkg"
+    genanki.Package(decks).write_to_file(out)
+    print(f"{out}: {sum(counts.values())} cards ({counts['MCQ']} MCQ, "
+          f"{counts['True / False']} True/False) in {len(decks)} modules")
 
 
 if __name__ == "__main__":
