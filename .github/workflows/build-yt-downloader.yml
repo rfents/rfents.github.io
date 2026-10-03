@@ -1,0 +1,82 @@
+name: Build YouTube Downloader
+
+on:
+  push:
+    paths:
+      - "yt-downloader/**"
+      - ".github/workflows/build-yt-downloader.yml"
+    tags:
+      - "yt-downloader-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: yt-downloader
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Unit tests
+        run: python -m unittest -v test_youtube_downloader
+
+      - name: Build
+        run: python build.py
+
+      - name: Check bundled tools and package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/YouTubeDownloader.exe -ArgumentList '--check' -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "self-check failed" }
+          New-Item -ItemType Directory -Force release | Out-Null
+          Compress-Archive -Path dist/YouTubeDownloader.exe -DestinationPath release/YouTubeDownloader-Windows.zip
+
+      - name: Check bundled tools and package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          dist/YouTubeDownloader.app/Contents/MacOS/YouTubeDownloader --check
+          mkdir -p release
+          ditto -c -k --keepParent dist/YouTubeDownloader.app release/YouTubeDownloader-macOS.zip
+
+      - name: Check bundled tools and package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          dist/YouTubeDownloader --check
+          mkdir -p release
+          tar -czf release/YouTubeDownloader-Linux.tar.gz -C dist YouTubeDownloader
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YouTubeDownloader-${{ runner.os }}
+          path: yt-downloader/release/*
+
+  release:
+    # Push a tag like yt-downloader-v1.0 to publish the three builds as a GitHub Release
+    if: startsWith(github.ref, 'refs/tags/yt-downloader-v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
