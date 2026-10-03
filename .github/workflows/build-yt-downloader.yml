@@ -2,6 +2,9 @@ name: Build YouTube Downloader
 
 on:
   push:
+    # Listing tags alone would limit pushes to tags only, so name branches too
+    branches:
+      - "**"
     paths:
       - "yt-downloader/**"
       - ".github/workflows/build-yt-downloader.yml"
