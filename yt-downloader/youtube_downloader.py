@@ -326,106 +326,351 @@ def fmt_speed(bps) -> str:
     return f"{bps:.1f} TB/s"
 
 
+# Futuristic dark-blue palette
+BG = "#040a18"         # window background, deep navy
+PANEL = "#081430"      # cards
+FIELD = "#0c1d42"      # inputs, progress troughs
+BORDER = "#1a3770"
+ACCENT = "#00d9ff"     # neon cyan
+ACCENT_2 = "#2f6bff"   # electric blue
+ACCENT_HOVER = "#6ee8ff"
+TEXT = "#e4efff"
+MUTED = "#7489b4"
+SUCCESS = "#2cf5a8"
+WARNING = "#ffc857"
+ERROR = "#ff5577"
+LOG_BG = "#020713"
+
+
+def _blend(c1: str, c2: str, t: float) -> str:
+    a = [int(c1[i:i + 2], 16) for i in (1, 3, 5)]
+    b = [int(c2[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#" + "".join(f"{round(x + (y - x) * t):02x}" for x, y in zip(a, b))
+
+
+def _pick_font(families, candidates, fallback):
+    return next((f for f in candidates if f in families), fallback)
+
+
+def _dark_title_bar(root):
+    """Windows 10/11: make the native title bar dark to match the theme."""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        value = ctypes.c_int(1)
+        for attr in (20, 19):  # DWMWA_USE_IMMERSIVE_DARK_MODE (new, old builds)
+            if ctypes.windll.dwmapi.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(value),
+                                                           ctypes.sizeof(value)) == 0:
+                break
+    except Exception:  # noqa: BLE001 - purely cosmetic
+        pass
+
+
 class App:
+    HEADER_H = 84
+
     def __init__(self, root):
         import tkinter as tk
+        from tkinter import font as tkfont
         from tkinter import ttk
 
         self.tk, self.ttk = tk, ttk
         self.root = root
         self.events: queue.Queue = queue.Queue()
         self.worker: Worker | None = None
+        self._state = "ready"
+        self._scan = 0
         s = load_settings()
 
-        root.title(APP_NAME)
-        root.minsize(620, 500)
-        frm = ttk.Frame(root, padding=14)
-        frm.pack(fill="both", expand=True)
-        frm.columnconfigure(1, weight=1)
+        families = set(tkfont.families(root))
+        ui = _pick_font(families, ["Segoe UI", "SF Pro Text", "Helvetica Neue", "Inter",
+                                   "Ubuntu", "DejaVu Sans"], "TkDefaultFont")
+        mono = _pick_font(families, ["Cascadia Mono", "Consolas", "Menlo", "JetBrains Mono",
+                                     "Ubuntu Mono", "DejaVu Sans Mono"], "TkFixedFont")
+        self.f_ui = (ui, 10)
+        self.f_small = (ui, 9)
+        self.f_section = (mono, 9, "bold")
+        self.f_title = (ui, 22, "bold")
+        self.f_mono = (mono, 9)
 
-        ttk.Label(frm, text="Paste a YouTube link (video or playlist):").grid(
-            row=0, column=0, columnspan=3, sticky="w")
+        root.title(APP_NAME)
+        root.configure(bg=BG)
+        root.minsize(700, 720)
+        root.geometry("780x830")
+        self._style()
+        _dark_title_bar(root)
+
+        # ---- Header ---------------------------------------------------------
+        self.header = tk.Canvas(root, height=self.HEADER_H, bg=BG, highlightthickness=0, bd=0)
+        self.header.pack(fill="x")
+        self.header.bind("<Configure>", lambda _e: self._draw_header())
+
+        body = tk.Frame(root, bg=BG)
+        body.pack(fill="both", expand=True, padx=18, pady=(6, 12))
+        body.columnconfigure(0, weight=1)
+
+        # ---- 01 Source ------------------------------------------------------
+        src = self._card(body, "01", "SOURCE")
+        src.master.grid(row=0, column=0, sticky="ew")
+        src.columnconfigure(0, weight=1)
+        ttk.Label(src, text="Paste a YouTube link: a single video or a whole playlist",
+                  style="CardMuted.TLabel").grid(row=0, column=0, columnspan=2, sticky="w")
         self.url = tk.StringVar()
-        url_entry = ttk.Entry(frm, textvariable=self.url)
-        url_entry.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 10))
+        url_entry = ttk.Entry(src, textvariable=self.url, style="Neon.TEntry", font=self.f_ui)
+        url_entry.grid(row=1, column=0, sticky="ew", pady=(6, 0), ipady=3)
         url_entry.bind("<Return>", lambda _e: self.start())
         url_entry.focus_set()
-        ttk.Button(frm, text="Paste", command=self.paste).grid(row=1, column=2, padx=(6, 0), pady=(4, 10))
+        ttk.Button(src, text="PASTE", style="Ghost.TButton", command=self.paste).grid(
+            row=1, column=1, padx=(8, 0), pady=(6, 0))
 
-        opts = ttk.Frame(frm)
-        opts.grid(row=2, column=0, columnspan=3, sticky="ew")
+        # ---- 02 Format ------------------------------------------------------
+        fmt = self._card(body, "02", "FORMAT")
+        fmt.master.grid(row=1, column=0, sticky="ew", pady=(10, 0))
+        row = ttk.Frame(fmt, style="Card.TFrame")
+        row.grid(row=0, column=0, sticky="w")
         self.kind = tk.StringVar(value=s["kind"])
-        ttk.Radiobutton(opts, text="Video (MP4)", value="video", variable=self.kind,
-                        command=self._kind_changed).pack(side="left")
-        ttk.Radiobutton(opts, text="Audio only (MP3)", value="audio", variable=self.kind,
-                        command=self._kind_changed).pack(side="left", padx=(12, 24))
-        ttk.Label(opts, text="Quality:").pack(side="left")
+        ttk.Radiobutton(row, text="Video  ·  MP4", value="video", variable=self.kind,
+                        style="Neon.TRadiobutton", command=self._kind_changed).pack(side="left")
+        ttk.Radiobutton(row, text="Audio  ·  MP3", value="audio", variable=self.kind,
+                        style="Neon.TRadiobutton", command=self._kind_changed).pack(side="left", padx=(18, 30))
+        ttk.Label(row, text="QUALITY", style="CardSection.TLabel").pack(side="left")
         self.quality = tk.StringVar(value=s["quality"] if s["quality"] in QUALITIES else "Best")
-        self.quality_box = ttk.Combobox(opts, textvariable=self.quality, values=QUALITIES,
-                                        width=8, state="readonly")
-        self.quality_box.pack(side="left", padx=(6, 0))
-
+        self.quality_box = ttk.Combobox(row, textvariable=self.quality, values=QUALITIES, width=8,
+                                        state="readonly", style="Neon.TCombobox", font=self.f_ui)
+        self.quality_box.pack(side="left", padx=(8, 0))
         self.whole_playlist = tk.BooleanVar(value=s["whole_playlist"])
-        ttk.Checkbutton(frm, text="Download the whole playlist when the link contains one",
-                        variable=self.whole_playlist).grid(row=3, column=0, columnspan=3,
-                                                           sticky="w", pady=(8, 0))
+        ttk.Checkbutton(fmt, text="Download the whole playlist when the link contains one",
+                        variable=self.whole_playlist, style="Neon.TCheckbutton").grid(
+            row=1, column=0, sticky="w", pady=(10, 0))
 
-        ttk.Label(frm, text="Save to:").grid(row=4, column=0, sticky="w", pady=(10, 0))
+        # ---- 03 Output ------------------------------------------------------
+        out = self._card(body, "03", "OUTPUT")
+        out.master.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        out.columnconfigure(1, weight=1)
+        ttk.Label(out, text="Save to", style="Card.TLabel").grid(row=0, column=0, sticky="w")
         self.out_dir = tk.StringVar(value=s["out_dir"])
-        ttk.Entry(frm, textvariable=self.out_dir).grid(row=4, column=1, sticky="ew",
-                                                       padx=6, pady=(10, 0))
-        folder_btns = ttk.Frame(frm)
-        folder_btns.grid(row=4, column=2, pady=(10, 0))
-        ttk.Button(folder_btns, text="Browse…", command=self.browse).pack(side="left")
-        ttk.Button(folder_btns, text="Open", command=lambda: open_folder(self.out_dir.get())
-                   ).pack(side="left", padx=(4, 0))
-
-        ttk.Label(frm, text="Use browser login:").grid(row=5, column=0, sticky="w", pady=(8, 0))
-        brow = ttk.Frame(frm)
-        brow.grid(row=5, column=1, columnspan=2, sticky="w", padx=6, pady=(8, 0))
+        ttk.Entry(out, textvariable=self.out_dir, style="Neon.TEntry", font=self.f_ui).grid(
+            row=0, column=1, sticky="ew", padx=(12, 8), ipady=2)
+        ttk.Button(out, text="BROWSE", style="Ghost.TButton", command=self.browse).grid(row=0, column=2)
+        ttk.Button(out, text="OPEN", style="Ghost.TButton",
+                   command=lambda: open_folder(self.out_dir.get())).grid(row=0, column=3, padx=(6, 0))
+        ttk.Label(out, text="Browser login", style="Card.TLabel").grid(row=1, column=0, sticky="w",
+                                                                       pady=(10, 0))
+        brow = ttk.Frame(out, style="Card.TFrame")
+        brow.grid(row=1, column=1, columnspan=3, sticky="w", padx=(12, 0), pady=(10, 0))
         self.browser = tk.StringVar(value=s["browser"] if s["browser"] in BROWSERS else "None")
-        ttk.Combobox(brow, textvariable=self.browser, values=BROWSERS, width=10,
-                     state="readonly").pack(side="left")
-        ttk.Label(brow, text="only needed for age-restricted or members-only videos",
-                  foreground="gray").pack(side="left", padx=(8, 0))
+        ttk.Combobox(brow, textvariable=self.browser, values=BROWSERS, width=10, state="readonly",
+                     style="Neon.TCombobox", font=self.f_ui).pack(side="left")
+        ttk.Label(brow, text="only for age-restricted or members-only videos",
+                  style="CardMuted.TLabel").pack(side="left", padx=(10, 0))
 
-        btns = ttk.Frame(frm)
-        btns.grid(row=6, column=0, columnspan=3, sticky="w", pady=(14, 8))
-        self.dl_btn = ttk.Button(btns, text="Download", command=self.start)
+        # ---- Actions --------------------------------------------------------
+        btns = ttk.Frame(body, style="TFrame")
+        btns.grid(row=3, column=0, sticky="ew", pady=(14, 2))
+        self.dl_btn = ttk.Button(btns, text="↓  DOWNLOAD", style="Accent.TButton", command=self.start)
         self.dl_btn.pack(side="left")
-        self.cancel_btn = ttk.Button(btns, text="Cancel", command=self.cancel, state="disabled")
-        self.cancel_btn.pack(side="left", padx=(8, 0))
+        self.cancel_btn = ttk.Button(btns, text="✕  CANCEL", style="Danger.TButton",
+                                     command=self.cancel, state="disabled")
+        self.cancel_btn.pack(side="left", padx=(10, 0))
 
+        # ---- 04 Status ------------------------------------------------------
+        st = self._card(body, "04", "STATUS")
+        st.master.grid(row=4, column=0, sticky="ew", pady=(10, 0))
+        st.columnconfigure(0, weight=1)
         self.item_label = tk.StringVar(value="Ready.")
-        ttk.Label(frm, textvariable=self.item_label).grid(row=7, column=0, columnspan=3, sticky="w")
-        self.item_bar = ttk.Progressbar(frm, maximum=100)
-        self.item_bar.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(4, 0))
+        ttk.Label(st, textvariable=self.item_label, style="Card.TLabel").grid(row=0, column=0, sticky="w")
         self.detail = tk.StringVar()
-        ttk.Label(frm, textvariable=self.detail, foreground="gray").grid(
-            row=9, column=0, columnspan=3, sticky="w")
+        ttk.Label(st, textvariable=self.detail, style="CardAccent.TLabel").grid(row=0, column=1, sticky="e")
+        self.item_bar = ttk.Progressbar(st, maximum=100, style="Neon.Horizontal.TProgressbar")
+        self.item_bar.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         self.total_label = tk.StringVar()
-        ttk.Label(frm, textvariable=self.total_label).grid(row=10, column=0, columnspan=3,
-                                                           sticky="w", pady=(6, 0))
-        self.total_bar = ttk.Progressbar(frm, maximum=100)
-        self.total_bar.grid(row=11, column=0, columnspan=3, sticky="ew", pady=(4, 8))
+        ttk.Label(st, textvariable=self.total_label, style="CardMuted.TLabel").grid(
+            row=2, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.total_bar = ttk.Progressbar(st, maximum=100, style="Total.Horizontal.TProgressbar")
+        self.total_bar.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(4, 0))
 
-        log_frame = ttk.Frame(frm)
-        log_frame.grid(row=12, column=0, columnspan=3, sticky="nsew")
-        frm.rowconfigure(12, weight=1)
-        self.log = tk.Text(log_frame, height=8, wrap="word", state="disabled")
-        scroll = ttk.Scrollbar(log_frame, command=self.log.yview)
+        # ---- 05 Log ---------------------------------------------------------
+        lg = self._card(body, "05", "LOG")
+        lg.master.grid(row=5, column=0, sticky="nsew", pady=(10, 0))
+        body.rowconfigure(5, weight=1, minsize=130)
+        lg.columnconfigure(0, weight=1)
+        lg.rowconfigure(0, weight=1)
+        self.log = tk.Text(lg, height=6, wrap="word", state="disabled", bg=LOG_BG, fg="#9cc3ff",
+                           insertbackground=ACCENT, selectbackground=ACCENT_2, relief="flat",
+                           bd=0, highlightthickness=1, highlightbackground=BORDER,
+                           highlightcolor=BORDER, padx=10, pady=8, font=self.f_mono)
+        self.log.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(lg, command=self.log.yview, style="Neon.Vertical.TScrollbar")
+        scroll.grid(row=0, column=1, sticky="ns")
         self.log.configure(yscrollcommand=scroll.set)
-        self.log.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
+        self.log.tag_configure("time", foreground=MUTED)
+        self.log.tag_configure("ok", foreground=SUCCESS)
+        self.log.tag_configure("warn", foreground=WARNING)
+        self.log.tag_configure("err", foreground=ERROR)
+        self.log.tag_configure("info", foreground=ACCENT)
 
-        ttk.Label(frm, text="Only download videos you have the right to save "
-                            "(your own uploads, Creative Commons, or with the creator's permission).",
-                  foreground="gray", wraplength=580).grid(row=13, column=0, columnspan=3,
-                                                          sticky="w", pady=(8, 0))
+        ttk.Label(body, text="Only download videos you have the right to save: your own uploads, "
+                             "Creative Commons, or with the creator's permission.",
+                  style="Footer.TLabel", wraplength=740).grid(row=6, column=0, sticky="w", pady=(8, 0))
 
         self._kind_changed()
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.after(100, self.poll)
+        root.after(40, self._animate)
+
+    # ---- Styling -------------------------------------------------------------
+    def _style(self):
+        root, ttk = self.root, self.ttk
+        st = ttk.Style(root)
+        st.theme_use("clam")
+        st.configure(".", background=BG, foreground=TEXT, fieldbackground=FIELD, bordercolor=BORDER,
+                     lightcolor=BORDER, darkcolor=BORDER, troughcolor=FIELD, focuscolor=ACCENT,
+                     selectbackground=ACCENT_2, selectforeground=TEXT, insertcolor=ACCENT,
+                     font=self.f_ui)
+        st.configure("TFrame", background=BG)
+        st.configure("Card.TFrame", background=PANEL)
+        st.configure("Card.TLabel", background=PANEL, foreground=TEXT, font=self.f_ui)
+        st.configure("CardMuted.TLabel", background=PANEL, foreground=MUTED, font=self.f_small)
+        st.configure("CardAccent.TLabel", background=PANEL, foreground=ACCENT, font=self.f_section)
+        st.configure("CardSection.TLabel", background=PANEL, foreground=ACCENT, font=self.f_section)
+        st.configure("Footer.TLabel", background=BG, foreground=MUTED, font=self.f_small)
+
+        st.configure("Neon.TEntry", fieldbackground=FIELD, foreground=TEXT, insertcolor=ACCENT,
+                     bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD, padding=(8, 4))
+        st.map("Neon.TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
+
+        st.configure("Ghost.TButton", background=FIELD, foreground=TEXT, bordercolor=BORDER,
+                     lightcolor=FIELD, darkcolor=FIELD, padding=(14, 6), font=self.f_section)
+        st.map("Ghost.TButton", background=[("pressed", BORDER), ("active", "#12285a")],
+               bordercolor=[("active", ACCENT)], foreground=[("active", ACCENT)])
+
+        st.configure("Accent.TButton", background=ACCENT, foreground=BG, bordercolor=ACCENT,
+                     lightcolor=ACCENT_HOVER, darkcolor=ACCENT, padding=(30, 11),
+                     font=(self.f_section[0], 11, "bold"))
+        st.map("Accent.TButton",
+               background=[("disabled", "#0f2752"), ("pressed", "#00b3d6"), ("active", ACCENT_HOVER)],
+               foreground=[("disabled", MUTED)],
+               bordercolor=[("disabled", BORDER)], lightcolor=[("disabled", "#0f2752")],
+               darkcolor=[("disabled", "#0f2752")])
+
+        st.configure("Danger.TButton", background=BG, foreground=ERROR, bordercolor=ERROR,
+                     lightcolor=BG, darkcolor=BG, padding=(20, 11), font=(self.f_section[0], 11, "bold"))
+        st.map("Danger.TButton", background=[("active", "#2a0f22")],
+               foreground=[("disabled", "#34466e")], bordercolor=[("disabled", "#1a2b52")])
+
+        for w in ("Neon.TRadiobutton", "Neon.TCheckbutton"):
+            st.configure(w, background=PANEL, foreground=TEXT, font=self.f_ui,
+                         indicatorbackground=FIELD, indicatorforeground=BG,
+                         upperbordercolor=ACCENT, lowerbordercolor=ACCENT, indicatormargin=(0, 0, 8, 0))
+            st.map(w, background=[("active", PANEL)], foreground=[("active", ACCENT)],
+                   indicatorbackground=[("selected", ACCENT), ("active", "#12285a")])
+
+        st.configure("Neon.TCombobox", fieldbackground=FIELD, background=FIELD, foreground=TEXT,
+                     arrowcolor=ACCENT, bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD,
+                     padding=(6, 3))
+        st.map("Neon.TCombobox",
+               fieldbackground=[("readonly", FIELD), ("disabled", PANEL)],
+               foreground=[("disabled", "#3e5280"), ("readonly", TEXT)],
+               selectbackground=[("readonly", FIELD)], selectforeground=[("readonly", TEXT)],
+               arrowcolor=[("disabled", "#3e5280")], bordercolor=[("focus", ACCENT), ("active", ACCENT)])
+        root.option_add("*TCombobox*Listbox.background", FIELD)
+        root.option_add("*TCombobox*Listbox.foreground", TEXT)
+        root.option_add("*TCombobox*Listbox.selectBackground", ACCENT_2)
+        root.option_add("*TCombobox*Listbox.selectForeground", TEXT)
+        root.option_add("*TCombobox*Listbox.font", self.f_ui)
+
+        st.configure("Neon.Horizontal.TProgressbar", troughcolor=FIELD, background=ACCENT,
+                     bordercolor=BORDER, lightcolor=ACCENT_HOVER, darkcolor=ACCENT, thickness=12)
+        st.configure("Total.Horizontal.TProgressbar", troughcolor=FIELD, background=ACCENT_2,
+                     bordercolor=BORDER, lightcolor="#5b8cff", darkcolor=ACCENT_2, thickness=6)
+        st.configure("Neon.Vertical.TScrollbar", background=FIELD, troughcolor=LOG_BG,
+                     bordercolor=BORDER, arrowcolor=ACCENT, lightcolor=FIELD, darkcolor=FIELD)
+        st.map("Neon.Vertical.TScrollbar", background=[("active", BORDER)])
+
+    def _card(self, parent, number: str, title: str):
+        """A bordered panel with a section heading; returns its inner frame."""
+        tk, ttk = self.tk, self.ttk
+        outer = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER)
+        head = tk.Frame(outer, bg=PANEL)
+        head.pack(fill="x", padx=14, pady=(8, 0))
+        tk.Label(head, text=f"{number} //", bg=PANEL, fg=ACCENT_2, font=self.f_section).pack(side="left")
+        tk.Label(head, text=title, bg=PANEL, fg=ACCENT, font=self.f_section).pack(side="left", padx=(6, 0))
+        tk.Frame(head, bg=BORDER, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0), pady=(2, 0))
+        inner = ttk.Frame(outer, style="Card.TFrame")
+        inner.pack(fill="both", expand=True, padx=14, pady=(6, 10))
+        return inner
+
+    # ---- Header art ------------------------------------------------------------
+    def _draw_header(self):
+        c = self.header
+        c.delete("all")
+        w, h = max(c.winfo_width(), 1), self.HEADER_H
+        # faint perspective grid
+        for x in range(0, w, 28):
+            c.create_line(x, 0, x, h, fill="#0a1938")
+        for y in range(0, h, 14):
+            c.create_line(0, y, w, y, fill="#071330")
+        # title
+        c.create_text(22, 32, anchor="w", text="YT", fill=TEXT, font=self.f_title)
+        c.create_text(22 + self._text_w("YT", self.f_title) + 2, 32, anchor="w", text="//",
+                      fill=ACCENT, font=self.f_title)
+        c.create_text(22 + self._text_w("YT//", self.f_title) + 6, 32, anchor="w", text="DOWNLOADER",
+                      fill=TEXT, font=self.f_title)
+        c.create_text(24, 60, anchor="w", text="VIDEO  ·  AUDIO  ·  PLAYLIST    —    POWERED BY YT-DLP",
+                      fill=MUTED, font=self.f_section)
+        # corner brackets
+        for x0, sx in ((10, 1), (w - 10, -1)):
+            c.create_line(x0, 22, x0, 12, x0 + 14 * sx, 12, fill=ACCENT_2, width=2)
+            c.create_line(x0, h - 22, x0, h - 12, x0 + 14 * sx, h - 12, fill=ACCENT_2, width=2)
+        # glowing gradient rule at the bottom
+        steps = 60
+        for i in range(steps):
+            t = i / (steps - 1)
+            col = _blend(ACCENT_2, ACCENT, t) if t < 0.5 else _blend(ACCENT, ACCENT_2, t)
+            c.create_line(w * i / steps, h - 2, w * (i + 1) / steps + 1, h - 2, fill=col, width=2)
+        self._draw_state()
+
+    def _text_w(self, text, font):
+        from tkinter import font as tkfont
+        return tkfont.Font(root=self.root, font=font).measure(text)
+
+    STATES = {"ready": ("READY", ACCENT), "busy": ("DOWNLOADING", WARNING),
+              "done": ("COMPLETE", SUCCESS), "error": ("FINISHED WITH ERRORS", ERROR),
+              "cancel": ("CANCELLED", MUTED)}
+
+    def _draw_state(self):
+        c = self.header
+        c.delete("state")
+        w = c.winfo_width()
+        label, col = self.STATES[self._state]
+        tw = self._text_w(label, self.f_section)
+        x1, x0 = w - 30, w - 30 - tw - 34
+        c.create_rectangle(x0, 22, x1, 46, outline=col, width=1, tags="state")
+        r = 4 if (self._state != "busy" or (self._scan // 8) % 2 == 0) else 2
+        c.create_oval(x0 + 13 - r, 34 - r, x0 + 13 + r, 34 + r, fill=col, outline=col, tags="state")
+        c.create_text(x0 + 24, 34, anchor="w", text=label, fill=col, font=self.f_section, tags="state")
+
+    def set_state(self, state: str):
+        self._state = state
+        self._draw_state()
+
+    def _animate(self):
+        """While downloading, sweep a light along the header rule and pulse the dot."""
+        c = self.header
+        c.delete("scan")
+        if self._state == "busy":
+            self._scan += 1
+            w, h = c.winfo_width(), self.HEADER_H
+            x = (self._scan * 9) % (w + 160) - 80
+            for i, width in enumerate((140, 90, 44)):
+                c.create_line(max(x - width / 2, 0), h - 2, min(x + width / 2, w), h - 2,
+                              fill=_blend(ACCENT, "#ffffff", 0.25 * (i + 1)), width=2 + i, tags="scan")
+            if self._scan % 8 == 0:
+                self._draw_state()
+        self.root.after(40, self._animate)
 
     # ------------------------------------------------------------------------
     def _kind_changed(self):
@@ -449,8 +694,20 @@ class App:
                 "whole_playlist": self.whole_playlist.get(), "browser": self.browser.get()}
 
     def write_log(self, text: str):
+        import time
+        if text.startswith("Saved"):
+            tag = "ok"
+        elif text.startswith(("ERROR", "Error")):
+            tag = "err"
+        elif text.startswith("Warning"):
+            tag = "warn"
+        elif text.startswith(("Link", "—")):
+            tag = "info"
+        else:
+            tag = ""
         self.log.configure(state="normal")
-        self.log.insert("end", text + "\n")
+        self.log.insert("end", time.strftime("[%H:%M:%S] "), "time")
+        self.log.insert("end", text + "\n", tag)
         self.log.see("end")
         self.log.configure(state="disabled")
 
@@ -472,6 +729,7 @@ class App:
         self.total_label.set("")
         self.detail.set("")
         self.item_label.set("Starting…")
+        self.set_state("busy")
         threading.Thread(target=self.worker.run, daemon=True).start()
 
     def cancel(self):
@@ -518,7 +776,9 @@ class App:
             summary += f", {r['failed']} failed (see log)"
         if r["cancelled"]:
             self.item_label.set("Cancelled. " + summary + ".")
+            self.set_state("cancel")
         else:
+            self.set_state("error" if r["failed"] else "done")
             self.item_label.set("Finished. " + summary + ".")
             if not r["failed"]:
                 self.total_bar["value"] = 100
