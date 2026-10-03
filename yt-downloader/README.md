@@ -36,7 +36,10 @@ It runs from anywhere, including a USB stick. It saves your last choices in
    skips everything already downloaded (tracked in `.downloaded-video.txt` /
    `.downloaded-audio.txt` in the save folder).
 
-Files go to `Downloads/Fenix Downloader` unless you choose another folder.
+Files go to `Downloads/Fenix Downloader` unless you pick another folder with
+**CHANGE** (a folder picker, so it shows folders only, not your files). To see
+your downloads, click **OPEN FOLDER** (the latest file is selected) or click a
+green path in the log.
 
 **Age-restricted or members-only videos:** set *Use browser login* to the
 browser where you are signed in to YouTube (close that browser first on Windows).

@@ -56,6 +56,17 @@ class FilenameTests(unittest.TestCase):
         self.assertTrue(self.ydl.prepare_filename(dict(self.info)).replace("\\", "/").endswith("/out/Song.mp4"))
 
 
+class RevealTests(unittest.TestCase):
+    def test_windows_selects_file_in_explorer(self):
+        import tempfile
+        from unittest import mock
+        with tempfile.NamedTemporaryFile(suffix=".mp4") as f, \
+                mock.patch.object(y.os, "name", "nt"), \
+                mock.patch.object(y.subprocess, "Popen") as popen:
+            y.reveal_file(f.name)
+        popen.assert_called_once_with(f'explorer /select,"{y.os.path.normpath(f.name)}"')
+
+
 class HelperTests(unittest.TestCase):
     def test_split_urls(self):
         self.assertEqual(y.split_urls(" https://youtu.be/a\nfoo https://www.youtube.com/watch?v=b "),

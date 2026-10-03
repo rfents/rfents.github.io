@@ -226,7 +226,7 @@ class Worker:
 
     def post_hook(self, filepath: str):
         self.done += 1
-        self.events.put(("log", "Saved: " + filepath))
+        self.events.put(("saved", os.path.abspath(filepath)))
 
     # -------------------------------------------------------------------------
     def run(self):
@@ -298,6 +298,19 @@ def save_settings(s: dict):
         settings_path().write_text(json.dumps(s, indent=2), encoding="utf-8")
     except OSError:
         pass
+
+
+def reveal_file(path: str):
+    """Open the file's folder in Explorer/Finder with the file selected."""
+    path = os.path.normpath(path)
+    if not os.path.exists(path):
+        open_folder(os.path.dirname(path))
+    elif os.name == "nt":
+        subprocess.Popen(f'explorer /select,"{path}"')
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", path])
+    else:
+        subprocess.Popen(["xdg-open", os.path.dirname(path)])
 
 
 def open_folder(path: str):
@@ -473,9 +486,10 @@ class App:
         self.out_dir = tk.StringVar(value=s["out_dir"])
         ttk.Entry(out, textvariable=self.out_dir, style="Neon.TEntry", font=self.f_ui).grid(
             row=0, column=1, sticky="ew", padx=(self.px(12), self.px(8)), ipady=self.px(2))
-        ttk.Button(out, text="BROWSE", style="Ghost.TButton", command=self.browse).grid(row=0, column=2)
-        ttk.Button(out, text="OPEN", style="Ghost.TButton",
-                   command=lambda: open_folder(self.out_dir.get())).grid(row=0, column=3, padx=(self.px(6), self.px(0)))
+        # CHANGE picks the save folder (Windows' folder picker never lists files);
+        # OPEN FOLDER shows the downloads, with the latest file selected
+        ttk.Button(out, text="CHANGE", style="Ghost.TButton", command=self.browse).grid(row=0, column=2)
+        ttk.Button(out, text="OPEN FOLDER", style="Ghost.TButton", command=self.show_files).grid(row=0, column=3, padx=(self.px(6), self.px(0)))
         ttk.Label(out, text="Browser login", style="Card.TLabel").grid(row=1, column=0, sticky="w",
                                                                        pady=(self.px(8), self.px(0)))
         brow = ttk.Frame(out, style="Card.TFrame")
@@ -531,6 +545,9 @@ class App:
         self.log.tag_configure("warn", foreground=WARNING)
         self.log.tag_configure("err", foreground=ERROR)
         self.log.tag_configure("info", foreground=ACCENT)
+        self.log.tag_configure("link", underline=True)
+        self._links = 0
+        self.last_saved: str | None = None
 
         ttk.Label(root, text="Only download videos you have the right to save: your own uploads, "
                              "Creative Commons, or with the creator's permission.",
@@ -753,6 +770,28 @@ class App:
                 "out_dir": self.out_dir.get().strip() or default_out_dir(),
                 "whole_playlist": self.whole_playlist.get(), "browser": self.browser.get()}
 
+    def show_files(self):
+        if self.last_saved and os.path.exists(self.last_saved):
+            reveal_file(self.last_saved)
+        else:
+            open_folder(self.out_dir.get().strip() or default_out_dir())
+
+    def write_link(self, prefix: str, path: str, on_click):
+        """A log line whose path opens Explorer/Finder when clicked."""
+        import time
+        self._links += 1
+        tag = f"link{self._links}"
+        self.log.configure(state="normal")
+        self.log.insert("end", time.strftime("[%H:%M:%S] "), "time")
+        self.log.insert("end", prefix, "ok")
+        self.log.insert("end", path, ("ok", "link", tag))
+        self.log.insert("end", "\n")
+        self.log.tag_bind(tag, "<Button-1>", lambda _e: on_click(path))
+        self.log.tag_bind(tag, "<Enter>", lambda _e: self.log.configure(cursor="hand2"))
+        self.log.tag_bind(tag, "<Leave>", lambda _e: self.log.configure(cursor=""))
+        self.log.see("end")
+        self.log.configure(state="disabled")
+
     def write_log(self, text: str):
         import time
         if text.startswith("Saved"):
@@ -804,6 +843,9 @@ class App:
                 kind, data = self.events.get_nowait()
                 if kind == "log":
                     self.write_log(data)
+                elif kind == "saved":
+                    self.last_saved = data
+                    self.write_link("Saved: ", data, reveal_file)
                 elif kind == "status":
                     self.item_label.set(data)
                     self.detail.set("")
@@ -845,6 +887,8 @@ class App:
                 self.total_bar["value"] = 100
                 self.item_bar["value"] = 100
         self.write_log("— " + self.item_label.get())
+        if r["done"] and self.last_saved:
+            self.write_link("Files are in: ", os.path.dirname(self.last_saved), open_folder)
 
     def on_close(self):
         save_settings(self.current_settings())
