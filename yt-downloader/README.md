@@ -1,4 +1,4 @@
-# YouTube Downloader
+# Fenix Downloader
 
 A small portable desktop app: paste a YouTube link (one video or a whole
 playlist), pick **Video (MP4)** or **Audio only (MP3)**, and click **Download**.
@@ -14,17 +14,17 @@ packed inside. It is built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 ## Getting the program
 
 Download the build for your system from the **Actions** tab of this repository
-(open the latest *Build YouTube Downloader* run, then **Artifacts**), or from
+(open the latest *Build Fenix Downloader* run, then **Artifacts**), or from
 **Releases** if one has been published:
 
 | System  | File                              | How to run |
 |---------|-----------------------------------|------------|
-| Windows | `YouTubeDownloader-Windows.zip`   | Unzip, double-click `YouTubeDownloader.exe`. If SmartScreen warns, click *More info → Run anyway*. |
-| macOS   | `YouTubeDownloader-macOS.zip`     | Unzip, right-click `YouTubeDownloader.app` → *Open* the first time (the app is not signed). |
-| Linux   | `YouTubeDownloader-Linux.tar.gz`  | `tar xzf YouTubeDownloader-Linux.tar.gz && ./YouTubeDownloader` |
+| Windows | `FenixDownloader-Windows.zip`   | Unzip, double-click `FenixDownloader.exe`. If SmartScreen warns, click *More info → Run anyway*. |
+| macOS   | `FenixDownloader-macOS.zip`     | Unzip, right-click `FenixDownloader.app` → *Open* the first time (the app is not signed). |
+| Linux   | `FenixDownloader-Linux.tar.gz`  | `tar xzf FenixDownloader-Linux.tar.gz && ./FenixDownloader` |
 
 It runs from anywhere, including a USB stick. It saves your last choices in
-`youtube_downloader_settings.json` next to the program.
+`fenix_downloader_settings.json` next to the program.
 
 ## Using it
 
@@ -36,7 +36,7 @@ It runs from anywhere, including a USB stick. It saves your last choices in
    skips everything already downloaded (tracked in `.downloaded-video.txt` /
    `.downloaded-audio.txt` in the save folder).
 
-Files go to `Downloads/YouTube Downloader` unless you choose another folder.
+Files go to `Downloads/Fenix Downloader` unless you choose another folder.
 
 **Age-restricted or members-only videos:** set *Use browser login* to the
 browser where you are signed in to YouTube (close that browser first on Windows).

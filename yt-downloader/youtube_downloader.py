@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""YouTube Downloader - a small portable GUI around yt-dlp.
+"""Fenix Downloader - a small portable GUI around yt-dlp.
 
 Paste a link to a single video or a playlist, choose video (MP4) or audio
 (MP3), and click Download. Only download videos you have the right to save.
@@ -18,7 +18,8 @@ from pathlib import Path
 import yt_dlp
 from yt_dlp.utils import DownloadCancelled
 
-APP_NAME = "YouTube Downloader"
+APP_NAME = "Fenix Downloader"
+OLD_APP_NAME = "YouTube Downloader"  # earlier builds; settings are migrated
 QUALITIES = ["Best", "1080p", "720p", "480p", "360p"]
 BROWSERS = ["None", "chrome", "firefox", "edge", "brave", "opera", "vivaldi", "safari"]
 
@@ -270,20 +271,25 @@ def default_out_dir() -> str:
     return str(Path.home() / "Downloads" / APP_NAME)
 
 
-def settings_path() -> Path:
-    portable = app_dir() / "youtube_downloader_settings.json"
+def settings_path(name: str = "fenix_downloader") -> Path:
+    portable = app_dir() / f"{name}_settings.json"
     if os.access(portable.parent, os.W_OK):
         return portable
-    return Path.home() / ".youtube_downloader_settings.json"
+    return Path.home() / f".{name}_settings.json"
 
 
 def load_settings() -> dict:
     s = {"kind": "video", "quality": "Best", "out_dir": default_out_dir(),
          "whole_playlist": True, "browser": "None"}
-    try:
-        s.update(json.loads(settings_path().read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        pass
+    # Fall back to the settings file of builds made before the rename
+    for path in (settings_path(), settings_path("youtube_downloader")):
+        try:
+            s.update(json.loads(path.read_text(encoding="utf-8")))
+            break
+        except (OSError, ValueError):
+            continue
+    if s["out_dir"] == str(Path.home() / "Downloads" / OLD_APP_NAME):
+        s["out_dir"] = default_out_dir()
     return s
 
 

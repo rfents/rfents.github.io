@@ -3,4 +3,4 @@ dist/
 release/
 __pycache__/
 *.spec
-youtube_downloader_settings.json
+fenix_downloader_settings.json

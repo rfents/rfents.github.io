@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build a single-file portable YouTube Downloader for the current OS.
+"""Build a single-file portable Fenix Downloader for the current OS.
 
     python -m pip install -r requirements.txt pyinstaller
     python build.py
 
-The result is in dist/: YouTubeDownloader.exe on Windows, YouTubeDownloader.app
-on macOS, YouTubeDownloader on Linux. ffmpeg and Deno are packed inside, so
+The result is in dist/: FenixDownloader.exe on Windows, FenixDownloader.app
+on macOS, FenixDownloader on Linux. ffmpeg and Deno are packed inside, so
 nothing else needs to be installed on the computer that runs it.
 """
 import os
@@ -36,7 +36,7 @@ def main():
 
     args = [
         "youtube_downloader.py",
-        "--name", "YouTubeDownloader",
+        "--name", "FenixDownloader",
         # macOS: the .app bundle is already one item; one-file mode is deprecated there
         "--onedir" if sys.platform == "darwin" else "--onefile",
         "--windowed",
@@ -46,7 +46,7 @@ def main():
         "--add-binary", f"{stage / ('deno' + EXE)}{os.pathsep}bin",
     ]
     if sys.platform == "darwin":
-        args += ["--osx-bundle-identifier", "io.github.rfents.youtubedownloader"]
+        args += ["--osx-bundle-identifier", "io.github.rfents.fenixdownloader"]
     PyInstaller.__main__.run(args)
 
 
