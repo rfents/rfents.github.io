@@ -1,0 +1,7 @@
+build/
+dist/
+release/
+__pycache__/
+*.spec
+fenix_downloader_settings.json
+youtube_downloader_settings.json
