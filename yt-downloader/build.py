@@ -44,6 +44,10 @@ def main():
         "--clean",
         "--add-binary", f"{stage / ('ffmpeg' + EXE)}{os.pathsep}bin",
         "--add-binary", f"{stage / ('deno' + EXE)}{os.pathsep}bin",
+        # FD icon: window/taskbar at runtime, and the program file itself
+        "--add-data", f"{HERE / 'assets' / 'fenix.png'}{os.pathsep}assets",
+        "--add-data", f"{HERE / 'assets' / 'fenix.ico'}{os.pathsep}assets",
+        "--icon", str(HERE / "assets" / ("fenix.icns" if sys.platform == "darwin" else "fenix.ico")),
     ]
     if sys.platform == "darwin":
         args += ["--osx-bundle-identifier", "io.github.rfents.fenixdownloader"]
