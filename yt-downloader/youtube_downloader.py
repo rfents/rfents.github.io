@@ -376,7 +376,6 @@ def _dark_title_bar(root):
 
 
 class App:
-    HEADER_H = 64
 
     def __init__(self, root):
         import tkinter as tk
@@ -401,29 +400,35 @@ class App:
         self.f_section = (mono, 9, "bold")
         self.f_title = (ui, 18, "bold")
         self.f_mono = (mono, 9)
+        # Windows display scaling (125%, 150%...) enlarges fonts; scale spacing to match
+        self.k = max(1.0, float(root.tk.call("tk", "scaling")) * 72 / 96)
+        title_h = tkfont.Font(root=root, font=self.f_title).metrics("linespace")
+        self.sub_h = tkfont.Font(root=root, font=self.f_section).metrics("linespace")
+        self.y_title = self.px(10) + title_h / 2
+        self.y_sub = self.px(10) + title_h + self.px(2) + self.sub_h / 2
+        self.header_h = round(self.y_sub + self.sub_h / 2 + self.px(12))
 
         root.title(APP_NAME)
         root.configure(bg=BG)
         self._style()
         self._set_icon()
-        _dark_title_bar(root)
 
         # ---- Header ---------------------------------------------------------
-        self.header = tk.Canvas(root, height=self.HEADER_H, bg=BG, highlightthickness=0, bd=0)
+        self.header = tk.Canvas(root, height=self.header_h, bg=BG, highlightthickness=0, bd=0)
         self.header.pack(fill="x")
         self.header.bind("<Configure>", lambda _e: self._draw_header())
 
         # Two columns keep the window short: settings left, progress + log right
         body = tk.Frame(root, bg=BG)
-        body.pack(fill="both", expand=True, padx=16, pady=(4, 10))
+        body.pack(fill="both", expand=True, padx=self.px(16), pady=(self.px(4), self.px(10)))
         body.columnconfigure(0, weight=3, uniform="col")
         body.columnconfigure(1, weight=2, uniform="col")
         body.rowconfigure(0, weight=1)
         left = tk.Frame(body, bg=BG)
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        left.grid(row=0, column=0, sticky="nsew", padx=(self.px(0), self.px(6)))
         left.columnconfigure(0, weight=1)
         right = tk.Frame(body, bg=BG)
-        right.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        right.grid(row=0, column=1, sticky="nsew", padx=(self.px(6), self.px(0)))
         right.columnconfigure(0, weight=1)
 
         # ---- 01 Source ------------------------------------------------------
@@ -432,63 +437,63 @@ class App:
         src.columnconfigure(0, weight=1)
         self.url = tk.StringVar()
         url_entry = ttk.Entry(src, textvariable=self.url, style="Neon.TEntry", font=self.f_ui)
-        url_entry.grid(row=1, column=0, sticky="ew", ipady=3)
+        url_entry.grid(row=1, column=0, sticky="ew", ipady=self.px(3))
         url_entry.bind("<Return>", lambda _e: self.start())
         url_entry.focus_set()
         ttk.Button(src, text="PASTE", style="Ghost.TButton", command=self.paste).grid(
-            row=1, column=1, padx=(8, 0))
+            row=1, column=1, padx=(self.px(8), self.px(0)))
         ttk.Label(src, text="A single video or a whole playlist link",
-                  style="CardMuted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+                  style="CardMuted.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(self.px(4), self.px(0)))
 
         # ---- 02 Format ------------------------------------------------------
         fmt = self._card(left, "02", "FORMAT")
-        fmt.master.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+        fmt.master.grid(row=1, column=0, sticky="ew", pady=(self.px(8), self.px(0)))
         row = ttk.Frame(fmt, style="Card.TFrame")
         row.grid(row=0, column=0, sticky="w")
         self.kind = tk.StringVar(value=s["kind"])
         ttk.Radiobutton(row, text="Video  ·  MP4", value="video", variable=self.kind,
                         style="Neon.TRadiobutton", command=self._kind_changed).pack(side="left")
         ttk.Radiobutton(row, text="Audio  ·  MP3", value="audio", variable=self.kind,
-                        style="Neon.TRadiobutton", command=self._kind_changed).pack(side="left", padx=(16, 22))
+                        style="Neon.TRadiobutton", command=self._kind_changed).pack(side="left", padx=(self.px(16), self.px(22)))
         ttk.Label(row, text="QUALITY", style="CardSection.TLabel").pack(side="left")
         self.quality = tk.StringVar(value=s["quality"] if s["quality"] in QUALITIES else "Best")
         self.quality_box = ttk.Combobox(row, textvariable=self.quality, values=QUALITIES, width=8,
                                         state="readonly", style="Neon.TCombobox", font=self.f_ui)
-        self.quality_box.pack(side="left", padx=(8, 0))
+        self.quality_box.pack(side="left", padx=(self.px(8), self.px(0)))
         self.whole_playlist = tk.BooleanVar(value=s["whole_playlist"])
         ttk.Checkbutton(fmt, text="Download the whole playlist when the link has one",
                         variable=self.whole_playlist, style="Neon.TCheckbutton").grid(
-            row=1, column=0, sticky="w", pady=(8, 0))
+            row=1, column=0, sticky="w", pady=(self.px(8), self.px(0)))
 
         # ---- 03 Output ------------------------------------------------------
         out = self._card(left, "03", "OUTPUT")
-        out.master.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        out.master.grid(row=2, column=0, sticky="ew", pady=(self.px(8), self.px(0)))
         out.columnconfigure(1, weight=1)
         ttk.Label(out, text="Save to", style="Card.TLabel").grid(row=0, column=0, sticky="w")
         self.out_dir = tk.StringVar(value=s["out_dir"])
         ttk.Entry(out, textvariable=self.out_dir, style="Neon.TEntry", font=self.f_ui).grid(
-            row=0, column=1, sticky="ew", padx=(12, 8), ipady=2)
+            row=0, column=1, sticky="ew", padx=(self.px(12), self.px(8)), ipady=self.px(2))
         ttk.Button(out, text="BROWSE", style="Ghost.TButton", command=self.browse).grid(row=0, column=2)
         ttk.Button(out, text="OPEN", style="Ghost.TButton",
-                   command=lambda: open_folder(self.out_dir.get())).grid(row=0, column=3, padx=(6, 0))
+                   command=lambda: open_folder(self.out_dir.get())).grid(row=0, column=3, padx=(self.px(6), self.px(0)))
         ttk.Label(out, text="Browser login", style="Card.TLabel").grid(row=1, column=0, sticky="w",
-                                                                       pady=(8, 0))
+                                                                       pady=(self.px(8), self.px(0)))
         brow = ttk.Frame(out, style="Card.TFrame")
-        brow.grid(row=1, column=1, columnspan=3, sticky="w", padx=(12, 0), pady=(8, 0))
+        brow.grid(row=1, column=1, columnspan=3, sticky="w", padx=(self.px(12), self.px(0)), pady=(self.px(8), self.px(0)))
         self.browser = tk.StringVar(value=s["browser"] if s["browser"] in BROWSERS else "None")
         ttk.Combobox(brow, textvariable=self.browser, values=BROWSERS, width=10, state="readonly",
                      style="Neon.TCombobox", font=self.f_ui).pack(side="left")
         ttk.Label(brow, text="only for age-restricted videos",
-                  style="CardMuted.TLabel").pack(side="left", padx=(10, 0))
+                  style="CardMuted.TLabel").pack(side="left", padx=(self.px(10), self.px(0)))
 
         # ---- Actions --------------------------------------------------------
         btns = ttk.Frame(left, style="TFrame")
-        btns.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        btns.grid(row=3, column=0, sticky="ew", pady=(self.px(12), self.px(0)))
         self.dl_btn = ttk.Button(btns, text="↓  DOWNLOAD", style="Accent.TButton", command=self.start)
         self.dl_btn.pack(side="left")
         self.cancel_btn = ttk.Button(btns, text="✕  CANCEL", style="Danger.TButton",
                                      command=self.cancel, state="disabled")
-        self.cancel_btn.pack(side="left", padx=(10, 0))
+        self.cancel_btn.pack(side="left", padx=(self.px(10), self.px(0)))
 
         # ---- 04 Status ------------------------------------------------------
         st = self._card(right, "04", "STATUS")
@@ -498,25 +503,25 @@ class App:
         ttk.Label(st, textvariable=self.item_label, style="Card.TLabel").grid(row=0, column=0, sticky="w")
         self.detail = tk.StringVar()
         self.item_bar = ttk.Progressbar(st, maximum=100, style="Neon.Horizontal.TProgressbar")
-        self.item_bar.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.item_bar.grid(row=1, column=0, sticky="ew", pady=(self.px(6), self.px(0)))
         ttk.Label(st, textvariable=self.detail, style="CardAccent.TLabel").grid(row=2, column=0, sticky="w",
-                                                                              pady=(4, 0))
+                                                                              pady=(self.px(4), self.px(0)))
         self.total_label = tk.StringVar()
         ttk.Label(st, textvariable=self.total_label, style="CardMuted.TLabel").grid(
-            row=3, column=0, sticky="w", pady=(6, 0))
+            row=3, column=0, sticky="w", pady=(self.px(6), self.px(0)))
         self.total_bar = ttk.Progressbar(st, maximum=100, style="Total.Horizontal.TProgressbar")
-        self.total_bar.grid(row=4, column=0, sticky="ew", pady=(4, 0))
+        self.total_bar.grid(row=4, column=0, sticky="ew", pady=(self.px(4), self.px(0)))
 
         # ---- 05 Log ---------------------------------------------------------
         lg = self._card(right, "05", "LOG")
-        lg.master.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
+        lg.master.grid(row=1, column=0, sticky="nsew", pady=(self.px(10), self.px(0)))
         right.rowconfigure(1, weight=1)
         lg.columnconfigure(0, weight=1)
         lg.rowconfigure(0, weight=1)
         self.log = tk.Text(lg, height=5, width=30, wrap="word", state="disabled", bg=LOG_BG, fg="#9cc3ff",
                            insertbackground=ACCENT, selectbackground=ACCENT_2, relief="flat",
                            bd=0, highlightthickness=1, highlightbackground=BORDER,
-                           highlightcolor=BORDER, padx=10, pady=8, font=self.f_mono)
+                           highlightcolor=BORDER, padx=self.px(10), pady=self.px(8), font=self.f_mono)
         self.log.grid(row=0, column=0, sticky="nsew")
         scroll = ttk.Scrollbar(lg, command=self.log.yview, style="Neon.Vertical.TScrollbar")
         scroll.grid(row=0, column=1, sticky="ns")
@@ -529,13 +534,17 @@ class App:
 
         ttk.Label(root, text="Only download videos you have the right to save: your own uploads, "
                              "Creative Commons, or with the creator's permission.",
-                  style="Footer.TLabel").pack(side="bottom", anchor="w", padx=16, pady=(0, 8), before=body)
+                  style="Footer.TLabel").pack(side="bottom", anchor="w", padx=self.px(16), pady=(self.px(0), self.px(8)), before=body)
 
         self._kind_changed()
         self._fit_to_screen()
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         root.after(100, self.poll)
         root.after(40, self._animate)
+
+    def px(self, value: float) -> int:
+        """Pixels scaled for the display's DPI setting."""
+        return round(value * self.k)
 
     # ---- Styling -------------------------------------------------------------
     def _style(self):
@@ -555,16 +564,16 @@ class App:
         st.configure("Footer.TLabel", background=BG, foreground=MUTED, font=self.f_small)
 
         st.configure("Neon.TEntry", fieldbackground=FIELD, foreground=TEXT, insertcolor=ACCENT,
-                     bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD, padding=(8, 4))
+                     bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD, padding=(self.px(8), self.px(4)))
         st.map("Neon.TEntry", bordercolor=[("focus", ACCENT)], lightcolor=[("focus", ACCENT)])
 
         st.configure("Ghost.TButton", background=FIELD, foreground=TEXT, bordercolor=BORDER,
-                     lightcolor=FIELD, darkcolor=FIELD, padding=(14, 6), font=self.f_section)
+                     lightcolor=FIELD, darkcolor=FIELD, padding=(self.px(14), self.px(6)), font=self.f_section)
         st.map("Ghost.TButton", background=[("pressed", BORDER), ("active", "#12285a")],
                bordercolor=[("active", ACCENT)], foreground=[("active", ACCENT)])
 
         st.configure("Accent.TButton", background=ACCENT, foreground=BG, bordercolor=ACCENT,
-                     lightcolor=ACCENT_HOVER, darkcolor=ACCENT, padding=(30, 11),
+                     lightcolor=ACCENT_HOVER, darkcolor=ACCENT, padding=(self.px(30), self.px(11)),
                      font=(self.f_section[0], 11, "bold"))
         st.map("Accent.TButton",
                background=[("disabled", "#0f2752"), ("pressed", "#00b3d6"), ("active", ACCENT_HOVER)],
@@ -573,20 +582,20 @@ class App:
                darkcolor=[("disabled", "#0f2752")])
 
         st.configure("Danger.TButton", background=BG, foreground=ERROR, bordercolor=ERROR,
-                     lightcolor=BG, darkcolor=BG, padding=(20, 11), font=(self.f_section[0], 11, "bold"))
+                     lightcolor=BG, darkcolor=BG, padding=(self.px(20), self.px(11)), font=(self.f_section[0], 11, "bold"))
         st.map("Danger.TButton", background=[("active", "#2a0f22")],
                foreground=[("disabled", "#34466e")], bordercolor=[("disabled", "#1a2b52")])
 
         for w in ("Neon.TRadiobutton", "Neon.TCheckbutton"):
             st.configure(w, background=PANEL, foreground=TEXT, font=self.f_ui,
                          indicatorbackground=FIELD, indicatorforeground=BG,
-                         upperbordercolor=ACCENT, lowerbordercolor=ACCENT, indicatormargin=(0, 0, 8, 0))
+                         upperbordercolor=ACCENT, lowerbordercolor=ACCENT, indicatormargin=(self.px(0), self.px(0), self.px(8), self.px(0)))
             st.map(w, background=[("active", PANEL)], foreground=[("active", ACCENT)],
                    indicatorbackground=[("selected", ACCENT), ("active", "#12285a")])
 
         st.configure("Neon.TCombobox", fieldbackground=FIELD, background=FIELD, foreground=TEXT,
                      arrowcolor=ACCENT, bordercolor=BORDER, lightcolor=FIELD, darkcolor=FIELD,
-                     padding=(6, 3))
+                     padding=(self.px(6), self.px(3)))
         st.map("Neon.TCombobox",
                fieldbackground=[("readonly", FIELD), ("disabled", PANEL)],
                foreground=[("disabled", "#3e5280"), ("readonly", TEXT)],
@@ -599,9 +608,9 @@ class App:
         root.option_add("*TCombobox*Listbox.font", self.f_ui)
 
         st.configure("Neon.Horizontal.TProgressbar", troughcolor=FIELD, background=ACCENT,
-                     bordercolor=BORDER, lightcolor=ACCENT_HOVER, darkcolor=ACCENT, thickness=12)
+                     bordercolor=BORDER, lightcolor=ACCENT_HOVER, darkcolor=ACCENT, thickness=self.px(12))
         st.configure("Total.Horizontal.TProgressbar", troughcolor=FIELD, background=ACCENT_2,
-                     bordercolor=BORDER, lightcolor="#5b8cff", darkcolor=ACCENT_2, thickness=6)
+                     bordercolor=BORDER, lightcolor="#5b8cff", darkcolor=ACCENT_2, thickness=self.px(6))
         st.configure("Neon.Vertical.TScrollbar", background=FIELD, troughcolor=LOG_BG,
                      bordercolor=BORDER, arrowcolor=ACCENT, lightcolor=FIELD, darkcolor=FIELD)
         st.map("Neon.Vertical.TScrollbar", background=[("active", BORDER)])
@@ -611,12 +620,12 @@ class App:
         tk, ttk = self.tk, self.ttk
         outer = tk.Frame(parent, bg=PANEL, highlightthickness=1, highlightbackground=BORDER)
         head = tk.Frame(outer, bg=PANEL)
-        head.pack(fill="x", padx=12, pady=(7, 0))
+        head.pack(fill="x", padx=self.px(12), pady=(self.px(7), self.px(0)))
         tk.Label(head, text=f"{number} //", bg=PANEL, fg=ACCENT_2, font=self.f_section).pack(side="left")
-        tk.Label(head, text=title, bg=PANEL, fg=ACCENT, font=self.f_section).pack(side="left", padx=(6, 0))
-        tk.Frame(head, bg=BORDER, height=1).pack(side="left", fill="x", expand=True, padx=(10, 0), pady=(2, 0))
+        tk.Label(head, text=title, bg=PANEL, fg=ACCENT, font=self.f_section).pack(side="left", padx=(self.px(6), self.px(0)))
+        tk.Frame(head, bg=BORDER, height=max(1, self.px(1))).pack(side="left", fill="x", expand=True, padx=(self.px(10), self.px(0)), pady=(self.px(2), self.px(0)))
         inner = ttk.Frame(outer, style="Card.TFrame")
-        inner.pack(fill="both", expand=True, padx=12, pady=(6, 9))
+        inner.pack(fill="both", expand=True, padx=self.px(12), pady=(self.px(6), self.px(9)))
         return inner
 
     def _set_icon(self):
@@ -630,42 +639,54 @@ class App:
         except Exception:  # noqa: BLE001 - a missing icon must not stop the app
             pass
 
+    def fit_ratio(self) -> float:
+        """1.0 if the layout fits the screen, else the factor it must shrink by."""
+        root = self.root
+        root.update_idletasks()
+        avail_w = root.winfo_screenwidth() - self.px(40)
+        avail_h = root.winfo_screenheight() - self.px(90)
+        return min(1.0, avail_w / root.winfo_reqwidth(), avail_h / root.winfo_reqheight())
+
     def _fit_to_screen(self):
         """Open at a comfortable size that always fits the screen, centred."""
         root = self.root
         root.update_idletasks()
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        w = min(max(root.winfo_reqwidth(), 960), sw - 40)
-        h = min(root.winfo_reqheight() + 10, sh - 90)  # leave room for the taskbar
-        root.minsize(min(820, w), min(root.winfo_reqheight(), h))
+        w = min(max(root.winfo_reqwidth(), self.px(960)), sw - self.px(40))
+        h = min(root.winfo_reqheight() + self.px(10), sh - self.px(90))  # room for the taskbar
+        root.minsize(min(self.px(820), w), min(root.winfo_reqheight(), h))
         root.geometry(f"{w}x{h}+{max((sw - w) // 2, 0)}+{max((sh - h) // 2 - 20, 0)}")
 
     # ---- Header art ------------------------------------------------------------
     def _draw_header(self):
-        c = self.header
+        c, P = self.header, self.px
         c.delete("all")
-        w, h = max(c.winfo_width(), 1), self.HEADER_H
+        w, h = max(c.winfo_width(), 1), self.header_h
         # faint perspective grid
-        for x in range(0, w, 28):
+        for x in range(0, w, P(28)):
             c.create_line(x, 0, x, h, fill="#0a1938")
-        for y in range(0, h, 14):
+        for y in range(0, h, P(14)):
             c.create_line(0, y, w, y, fill="#071330")
-        # title
-        c.create_text(22, 25, anchor="w", text="FENIX", fill=ACCENT, font=self.f_title)
-        c.create_text(22 + self._text_w("FENIX ", self.f_title) + 4, 25, anchor="w", text="DOWNLOADER",
-                      fill=TEXT, font=self.f_title)
-        c.create_text(24, 47, anchor="w", text="VIDEO  ·  AUDIO  ·  PLAYLIST    —    POWERED BY YT-DLP",
+        # title and subtitle, stacked using the real font heights
+        x0 = P(24)
+        c.create_text(x0, self.y_title, anchor="w", text="FENIX", fill=ACCENT, font=self.f_title)
+        c.create_text(x0 + self._text_w("FENIX ", self.f_title), self.y_title, anchor="w",
+                      text="DOWNLOADER", fill=TEXT, font=self.f_title)
+        c.create_text(x0 + P(2), self.y_sub, anchor="w",
+                      text="VIDEO  ·  AUDIO  ·  PLAYLIST    —    POWERED BY YT-DLP",
                       fill=MUTED, font=self.f_section)
         # corner brackets
-        for x0, sx in ((10, 1), (w - 10, -1)):
-            c.create_line(x0, 18, x0, 8, x0 + 12 * sx, 8, fill=ACCENT_2, width=2)
-            c.create_line(x0, h - 18, x0, h - 8, x0 + 12 * sx, h - 8, fill=ACCENT_2, width=2)
+        arm, inset = P(12), P(8)
+        for bx, sx in ((P(10), 1), (w - P(10), -1)):
+            c.create_line(bx, inset + arm, bx, inset, bx + arm * sx, inset, fill=ACCENT_2, width=P(2))
+            c.create_line(bx, h - inset - arm, bx, h - inset, bx + arm * sx, h - inset,
+                          fill=ACCENT_2, width=P(2))
         # glowing gradient rule at the bottom
         steps = 60
         for i in range(steps):
             t = i / (steps - 1)
             col = _blend(ACCENT_2, ACCENT, t) if t < 0.5 else _blend(ACCENT, ACCENT_2, t)
-            c.create_line(w * i / steps, h - 2, w * (i + 1) / steps + 1, h - 2, fill=col, width=2)
+            c.create_line(w * i / steps, h - P(2), w * (i + 1) / steps + 1, h - P(2), fill=col, width=P(2))
         self._draw_state()
 
     def _text_w(self, text, font):
@@ -677,16 +698,19 @@ class App:
               "cancel": ("CANCELLED", MUTED)}
 
     def _draw_state(self):
-        c = self.header
+        c, P = self.header, self.px
         c.delete("state")
         w = c.winfo_width()
         label, col = self.STATES[self._state]
         tw = self._text_w(label, self.f_section)
-        x1, x0 = w - 30, w - 30 - tw - 34
-        c.create_rectangle(x0, 20, x1, 44, outline=col, width=1, tags="state")
-        r = 4 if (self._state != "busy" or (self._scan // 8) % 2 == 0) else 2
-        c.create_oval(x0 + 13 - r, 32 - r, x0 + 13 + r, 32 + r, fill=col, outline=col, tags="state")
-        c.create_text(x0 + 24, 32, anchor="w", text=label, fill=col, font=self.f_section, tags="state")
+        cy = self.header_h / 2 - P(1)
+        half = self.sub_h / 2 + P(5)
+        x1 = w - P(30)
+        x0 = x1 - tw - P(34)
+        c.create_rectangle(x0, cy - half, x1, cy + half, outline=col, width=max(1, P(1)), tags="state")
+        r = P(4) if (self._state != "busy" or (self._scan // 8) % 2 == 0) else P(2)
+        c.create_oval(x0 + P(13) - r, cy - r, x0 + P(13) + r, cy + r, fill=col, outline=col, tags="state")
+        c.create_text(x0 + P(24), cy, anchor="w", text=label, fill=col, font=self.f_section, tags="state")
 
     def set_state(self, state: str):
         self._state = state
@@ -698,11 +722,12 @@ class App:
         c.delete("scan")
         if self._state == "busy":
             self._scan += 1
-            w, h = c.winfo_width(), self.HEADER_H
-            x = (self._scan * 9) % (w + 160) - 80
-            for i, width in enumerate((140, 90, 44)):
-                c.create_line(max(x - width / 2, 0), h - 2, min(x + width / 2, w), h - 2,
-                              fill=_blend(ACCENT, "#ffffff", 0.25 * (i + 1)), width=2 + i, tags="scan")
+            P = self.px
+            w, h = c.winfo_width(), self.header_h
+            x = (self._scan * P(9)) % (w + P(160)) - P(80)
+            for i, width in enumerate((P(140), P(90), P(44))):
+                c.create_line(max(x - width / 2, 0), h - P(2), min(x + width / 2, w), h - P(2),
+                              fill=_blend(ACCENT, "#ffffff", 0.25 * (i + 1)), width=P(2 + i), tags="scan")
             if self._scan % 8 == 0:
                 self._draw_state()
         self.root.after(40, self._animate)
@@ -864,10 +889,27 @@ def main():
         except Exception:  # noqa: BLE001
             pass
 
+    root, _app = launch()
+    root.mainloop()
+
+
+def launch(scaling: float | None = None):
+    """Create the window; if it is too big for the screen (e.g. 200% display
+    scaling on a small screen), rebuild it with everything a bit smaller."""
     import tkinter as tk
     root = tk.Tk()
-    App(root)
-    root.mainloop()
+    root.withdraw()
+    if scaling:
+        root.tk.call("tk", "scaling", scaling)
+    app = App(root)
+    ratio = app.fit_ratio()
+    if ratio < 0.99:
+        smaller = float(root.tk.call("tk", "scaling")) * ratio * 0.97
+        root.destroy()
+        return launch(smaller)
+    root.deiconify()
+    _dark_title_bar(root)
+    return root, app
 
 
 if __name__ == "__main__":
