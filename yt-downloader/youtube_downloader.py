@@ -614,10 +614,8 @@ class App:
         for y in range(0, h, 14):
             c.create_line(0, y, w, y, fill="#071330")
         # title
-        c.create_text(22, 32, anchor="w", text="YT", fill=TEXT, font=self.f_title)
-        c.create_text(22 + self._text_w("YT", self.f_title) + 2, 32, anchor="w", text="//",
-                      fill=ACCENT, font=self.f_title)
-        c.create_text(22 + self._text_w("YT//", self.f_title) + 6, 32, anchor="w", text="DOWNLOADER",
+        c.create_text(22, 32, anchor="w", text="FENIX", fill=ACCENT, font=self.f_title)
+        c.create_text(22 + self._text_w("FENIX ", self.f_title) + 4, 32, anchor="w", text="DOWNLOADER",
                       fill=TEXT, font=self.f_title)
         c.create_text(24, 60, anchor="w", text="VIDEO  ·  AUDIO  ·  PLAYLIST    —    POWERED BY YT-DLP",
                       fill=MUTED, font=self.f_section)
